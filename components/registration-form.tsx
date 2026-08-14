@@ -581,7 +581,7 @@ export function RegistrationForm() {
                   </p>
                   <MultiFileField
                     label="Bukti Follow Instagram"
-                    hint="Screenshot follow akun IG panitia — JPG / PNG"
+                    hint="Screenshot follow akun IG panitia auditphoria6.0— JPG / PNG"
                     accept="image/png,image/jpeg"
                     icon={<AtSign className="size-4" />}
                     files={files.followIg}
