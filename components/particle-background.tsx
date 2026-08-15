@@ -13,7 +13,6 @@ type Particle = {
 }
 
 // Warna cadangan (hex) kalau browser tidak mendukung oklch() di dalam <canvas>.
-// Nilainya disamakan secara visual dengan --primary (ungu) dan --accent (emas) di globals.css.
 const FALLBACK_PRIMARY = "#5B21B6"
 const FALLBACK_ACCENT = "#F0C419"
 
@@ -25,17 +24,10 @@ function resolveThemeColor(cssVarValue: string, fallback: string) {
 
   testCtx.fillStyle = "#000000"
   testCtx.fillStyle = cssVarValue
-  // Kalau browser gagal parse warnanya (mis. oklch() belum didukung),
-  // fillStyle otomatis balik/tetap ke nilai sebelumnya ("#000000").
   const accepted = testCtx.fillStyle !== "#000000"
   return accepted ? cssVarValue : fallback
 }
 
-/**
- * Latar belakang partikel naik ke atas, warnanya diambil dari
- * CSS variable tema (--primary & --accent), dengan fallback warna
- * tetap (hex) kalau browser tidak mendukung format warna oklch().
- */
 export function ParticleBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -50,7 +42,7 @@ export function ParticleBackground() {
     const rawAccent = rootStyles.getPropertyValue("--accent").trim()
     const primary = resolveThemeColor(rawPrimary, FALLBACK_PRIMARY)
     const accent = resolveThemeColor(rawAccent, FALLBACK_ACCENT)
-    const colors = [primary, primary, accent] // primary muncul lebih sering daripada accent
+    const colors = [primary, primary, accent]
 
     let particles: Particle[] = []
     let animationId = 0
