@@ -12,10 +12,29 @@ type Particle = {
   alpha: number
 }
 
+// Warna cadangan (hex) kalau browser tidak mendukung oklch() di dalam <canvas>.
+// Nilainya disamakan secara visual dengan --primary (ungu) dan --accent (emas) di globals.css.
+const FALLBACK_PRIMARY = "#5B21B6"
+const FALLBACK_ACCENT = "#F0C419"
+
+function resolveThemeColor(cssVarValue: string, fallback: string) {
+  if (typeof document === "undefined") return fallback
+  const testCanvas = document.createElement("canvas")
+  const testCtx = testCanvas.getContext("2d")
+  if (!testCtx || !cssVarValue) return fallback
+
+  testCtx.fillStyle = "#000000"
+  testCtx.fillStyle = cssVarValue
+  // Kalau browser gagal parse warnanya (mis. oklch() belum didukung),
+  // fillStyle otomatis balik/tetap ke nilai sebelumnya ("#000000").
+  const accepted = testCtx.fillStyle !== "#000000"
+  return accepted ? cssVarValue : fallback
+}
+
 /**
- * Latar belakang partikel naik ke atas, warnanya diambil langsung dari
- * CSS variable tema (--primary & --accent) supaya palet warna
- * selalu ikut tema yang sudah ada, tanpa perlu di-hardcode.
+ * Latar belakang partikel naik ke atas, warnanya diambil dari
+ * CSS variable tema (--primary & --accent), dengan fallback warna
+ * tetap (hex) kalau browser tidak mendukung format warna oklch().
  */
 export function ParticleBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -27,8 +46,10 @@ export function ParticleBackground() {
     if (!ctx) return
 
     const rootStyles = getComputedStyle(document.documentElement)
-    const primary = rootStyles.getPropertyValue("--primary").trim() || "oklch(0.52 0.23 285)"
-    const accent = rootStyles.getPropertyValue("--accent").trim() || "oklch(0.83 0.16 82)"
+    const rawPrimary = rootStyles.getPropertyValue("--primary").trim()
+    const rawAccent = rootStyles.getPropertyValue("--accent").trim()
+    const primary = resolveThemeColor(rawPrimary, FALLBACK_PRIMARY)
+    const accent = resolveThemeColor(rawAccent, FALLBACK_ACCENT)
     const colors = [primary, primary, accent] // primary muncul lebih sering daripada accent
 
     let particles: Particle[] = []
@@ -38,39 +59,26 @@ export function ParticleBackground() {
     const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1
 
     function resize() {
-      const parent = canvas!.parentElement
-      width = canvas!.width = (parent?.clientWidth ?? window.innerWidth) * dpr
-      height = canvas!.height = (parent?.clientHeight ?? window.innerHeight) * dpr
-      canvas!.style.width = "100%"
-      canvas!.style.height = "100%"
+      width = canvas!.width = window.innerWidth * dpr
+      height = canvas!.height = window.innerHeight * dpr
     }
 
     function createParticles() {
-      const count = Math.min(60, Math.max(24, Math.floor((width * height) / (28000 * dpr * dpr))))
+      const count = Math.min(70, Math.max(28, Math.floor((width * height) / (24000 * dpr * dpr))))
       particles = Array.from({ length: count }, () => ({
         x: Math.random() * width,
         y: Math.random() * height,
-        r: (Math.random() * 1.6 + 0.8) * dpr,
-        vx: (Math.random() - 0.5) * 0.08 * dpr, // sedikit goyang kiri-kanan
-        vy: -(Math.random() * 0.35 + 0.12) * dpr, // selalu naik ke atas
+        r: (Math.random() * 2 + 1.2) * dpr,
+        vx: (Math.random() - 0.5) * 0.08 * dpr,
+        vy: -(Math.random() * 0.4 + 0.15) * dpr,
         color: colors[Math.floor(Math.random() * colors.length)],
-        alpha: Math.random() * 0.35 + 0.12,
+        alpha: Math.random() * 0.4 + 0.25,
       }))
     }
 
-    function tick() {
+    function draw() {
       ctx!.clearRect(0, 0, width, height)
       for (const p of particles) {
-        p.x += p.vx
-        p.y += p.vy
-        if (p.x < -10) p.x = width + 10
-        if (p.x > width + 10) p.x = -10
-        if (p.y < -10) {
-          // sampai atas, muncul lagi dari bawah dengan posisi x acak baru
-          p.y = height + 10
-          p.x = Math.random() * width
-        }
-
         ctx!.beginPath()
         ctx!.arc(p.x, p.y, p.r, 0, Math.PI * 2)
         ctx!.fillStyle = p.color
@@ -78,6 +86,20 @@ export function ParticleBackground() {
         ctx!.fill()
       }
       ctx!.globalAlpha = 1
+    }
+
+    function tick() {
+      for (const p of particles) {
+        p.x += p.vx
+        p.y += p.vy
+        if (p.x < -10) p.x = width + 10
+        if (p.x > width + 10) p.x = -10
+        if (p.y < -10) {
+          p.y = height + 10
+          p.x = Math.random() * width
+        }
+      }
+      draw()
       animationId = requestAnimationFrame(tick)
     }
 
@@ -89,21 +111,13 @@ export function ParticleBackground() {
     if (!prefersReducedMotion) {
       tick()
     } else {
-      // Kalau user set "reduce motion", tampilkan partikel statis saja (tidak bergerak)
-      ctx.clearRect(0, 0, width, height)
-      for (const p of particles) {
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
-        ctx.fillStyle = p.color
-        ctx.globalAlpha = p.alpha
-        ctx.fill()
-      }
-      ctx.globalAlpha = 1
+      draw()
     }
 
     function handleResize() {
       resize()
       createParticles()
+      if (prefersReducedMotion) draw()
     }
     window.addEventListener("resize", handleResize)
 
@@ -117,7 +131,7 @@ export function ParticleBackground() {
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="pointer-events-none fixed inset-0 -z-10 h-full w-full"
+      className="pointer-events-none fixed inset-0 -z-10 h-screen w-screen"
     />
   )
 }
