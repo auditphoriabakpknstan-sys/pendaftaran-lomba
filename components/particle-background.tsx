@@ -13,6 +13,7 @@ type Particle = {
 }
 
 // Warna cadangan (hex) kalau browser tidak mendukung oklch() di dalam <canvas>.
+// Nilainya disamakan secara visual dengan --primary (ungu) dan --accent (emas) di globals.css.
 const FALLBACK_PRIMARY = "#5B21B6"
 const FALLBACK_ACCENT = "#F0C419"
 
@@ -56,15 +57,15 @@ export function ParticleBackground() {
     }
 
     function createParticles() {
-      const count = Math.min(70, Math.max(28, Math.floor((width * height) / (24000 * dpr * dpr))))
+      const count = Math.min(90, Math.max(45, Math.floor((width * height) / (14000 * dpr * dpr))))
       particles = Array.from({ length: count }, () => ({
         x: Math.random() * width,
         y: Math.random() * height,
-        r: (Math.random() * 2 + 1.2) * dpr,
-        vx: (Math.random() - 0.5) * 0.08 * dpr,
-        vy: -(Math.random() * 0.4 + 0.15) * dpr,
+        r: (Math.random() * 3.5 + 2.5) * dpr,
+        vx: (Math.random() - 0.5) * 0.1 * dpr,
+        vy: -(Math.random() * 0.5 + 0.2) * dpr,
         color: colors[Math.floor(Math.random() * colors.length)],
-        alpha: Math.random() * 0.4 + 0.25,
+        alpha: Math.random() * 0.35 + 0.55,
       }))
     }
 
@@ -75,8 +76,11 @@ export function ParticleBackground() {
         ctx!.arc(p.x, p.y, p.r, 0, Math.PI * 2)
         ctx!.fillStyle = p.color
         ctx!.globalAlpha = p.alpha
+        ctx!.shadowColor = p.color
+        ctx!.shadowBlur = p.r * 4
         ctx!.fill()
       }
+      ctx!.shadowBlur = 0
       ctx!.globalAlpha = 1
     }
 
