@@ -1,6 +1,7 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Plus_Jakarta_Sans, Sora } from 'next/font/google'
+import { ParticleBackground } from '@/components/particle-background'
 import './globals.css'
 
 const jakarta = Plus_Jakarta_Sans({
@@ -54,6 +55,7 @@ export default function RootLayout({
   return (
     <html lang="id" className={`${jakarta.variable} ${sora.variable} bg-background`}>
       <body className="font-sans antialiased">
+        <ParticleBackground />
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
