@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import Image from "next/image"
 import {
   FileText,
@@ -32,6 +32,8 @@ import {
   Check,
   X,
   Plus,
+  Clock,
+  Download,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -85,6 +87,18 @@ const initialFiles: FileState = {
 
 const MAX_BUKTI = 10
 const MAX_BAYAR = 5
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB — berlaku untuk SEMUA jenis berkas
+
+// Batas waktu pendaftaran per kategori. Ubah sesuai jadwal lomba yang sebenarnya.
+// Format: "YYYY-MM-DDTHH:mm:ss" (waktu lokal WIB)
+const kategoriDeadline: Record<Exclude<Kategori, "">, string> = {
+  essay: "2026-09-15T23:59:59",
+  policy: "2026-09-15T23:59:59",
+  order: "2026-09-15T23:59:59",
+  infografis: "2026-09-20T23:59:59",
+}
+
+const PHONE_REGEX = /^[0-9+\s-]{8,}$/
 
 const kategoriList: {
   value: Exclude<Kategori, "">
@@ -131,10 +145,10 @@ const kategoriKaryaLabel: Record<Exclude<Kategori, "">, string> = {
 }
 
 const kategoriKaryaHint: Record<Exclude<Kategori, "">, string> = {
-  essay: "Tahap pengumpulan abstrak — PDF / DOC / DOCX",
-  policy: "Tahap pengumpulan abstrak — PDF / DOC / DOCX",
-  order: "Tahap pengumpulan abstrak — PDF / DOC / DOCX",
-  infografis: "Unggah karya infografis — JPG / PNG / PDF",
+  essay: "Tahap pengumpulan abstrak — PDF / DOC / DOCX · maks 10MB",
+  policy: "Tahap pengumpulan abstrak — PDF / DOC / DOCX · maks 10MB",
+  order: "Tahap pengumpulan abstrak — PDF / DOC / DOCX · maks 10MB",
+  infografis: "Unggah karya infografis — JPG / PNG / PDF · maks 10MB",
 }
 
 const kategoriKaryaAccept: Record<Exclude<Kategori, "">, string> = {
@@ -156,6 +170,88 @@ const BANK = {
   atasNama: "Panitia Auditphoria 6.0",
 }
 
+const RECEIPT_STORAGE_KEY = "auditphoria-last-registration"
+
+function generateReferenceId() {
+  const rand = Math.random().toString(36).slice(2, 8).toUpperCase()
+  const date = new Date()
+  const y = date.getFullYear().toString().slice(-2)
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  const d = String(date.getDate()).padStart(2, "0")
+  return `AUD6-${y}${m}${d}-${rand}`
+}
+
+type ReceiptData = {
+  referenceId: string
+  kategoriLabel: string
+  namaTim: string
+  ketua: string
+  sekolah: string
+  email: string
+  telepon: string
+  savedAt: string
+}
+
+function saveReceiptToStorage(referenceId: string, form: FormState, kategoriLabel: string) {
+  if (typeof window === "undefined") return
+  try {
+    const receipt: ReceiptData = {
+      referenceId,
+      kategoriLabel,
+      namaTim: form.namaTim,
+      ketua: form.ketua,
+      sekolah: form.sekolah,
+      email: form.email,
+      telepon: form.telepon,
+      savedAt: new Date().toISOString(),
+    }
+    window.localStorage.setItem(RECEIPT_STORAGE_KEY, JSON.stringify(receipt))
+  } catch {
+    // localStorage tidak tersedia (mis. private browsing) — abaikan, tidak fatal
+  }
+}
+
+function loadReceiptFromStorage(): ReceiptData | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem(RECEIPT_STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as ReceiptData) : null
+  } catch {
+    return null
+  }
+}
+
+function downloadReceiptFile(receipt: ReceiptData) {
+  const lines = [
+    "==============================================",
+    "  BUKTI PENDAFTARAN — AUDITPHORIA 6.0",
+    "==============================================",
+    "",
+    `Nomor Referensi : ${receipt.referenceId}`,
+    `Kategori Lomba   : ${receipt.kategoriLabel}`,
+    `Nama Tim/Peserta : ${receipt.namaTim || "-"}`,
+    `Nama Ketua       : ${receipt.ketua}`,
+    `Asal Institusi   : ${receipt.sekolah}`,
+    `Email            : ${receipt.email}`,
+    `No. Telepon      : ${receipt.telepon}`,
+    `Waktu Daftar     : ${new Date(receipt.savedAt).toLocaleString("id-ID", { dateStyle: "full", timeStyle: "short" })}`,
+    "",
+    "Simpan bukti ini sebagai referensi. Jika ada",
+    "pertanyaan, sertakan Nomor Referensi di atas",
+    "saat menghubungi panitia.",
+    "==============================================",
+  ]
+  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = `bukti-pendaftaran-${receipt.referenceId}.txt`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 export function RegistrationForm() {
   const [step, setStep] = useState(0)
   const [form, setForm] = useState<FormState>(initialForm)
@@ -165,6 +261,15 @@ export function RegistrationForm() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [copied, setCopied] = useState(false)
+  const [referenceId, setReferenceId] = useState("")
+  const [honeypot, setHoneypot] = useState("") // field jebakan bot, harus selalu kosong
+  const [lastReceipt, setLastReceipt] = useState<ReceiptData | null>(null)
+  const formLoadedAt = useRef(Date.now())
+  const submittingRef = useRef(false) // guard tambahan supaya klik ganda tidak lolos meski state React belum sempat update
+
+  useEffect(() => {
+    setLastReceipt(loadReceiptFromStorage())
+  }, [])
 
   const perorangan = isPerorangan(form.kategori)
 
@@ -174,11 +279,24 @@ export function RegistrationForm() {
   }
 
   function setKarya(file: File | null) {
+    if (file && file.size > MAX_FILE_SIZE) {
+      setErrors((prev) => ({ ...prev, abstrak: `Ukuran file maksimal 10MB (file Anda ${(file.size / 1024 / 1024).toFixed(1)}MB)` }))
+      return
+    }
     setFiles((prev) => ({ ...prev, abstrak: file }))
     setErrors((prev) => ({ ...prev, abstrak: "" }))
   }
 
   function setMulti(key: keyof Omit<FileState, "abstrak">, list: File[]) {
+    const oversized = list.find((f) => f.size > MAX_FILE_SIZE)
+    if (oversized) {
+      setErrors((prev) => ({
+        ...prev,
+        [key]: `Berkas "${oversized.name}" melebihi 10MB, dihapus dari pilihan`,
+      }))
+      setFiles((prev) => ({ ...prev, [key]: list.filter((f) => f.size <= MAX_FILE_SIZE) }))
+      return
+    }
     setFiles((prev) => ({ ...prev, [key]: list }))
     setErrors((prev) => ({ ...prev, [key]: "" }))
   }
@@ -201,6 +319,7 @@ export function RegistrationForm() {
     if (!form.sekolah.trim()) next.sekolah = "Asal sekolah/universitas wajib diisi"
     if (!form.kota.trim()) next.kota = "Kota asal wajib diisi"
     if (!form.telepon.trim()) next.telepon = "Nomor telepon wajib diisi"
+    else if (!PHONE_REGEX.test(form.telepon.trim())) next.telepon = "Nomor telepon minimal 8 karakter dan hanya boleh angka"
     if (!form.email.trim()) next.email = "Email wajib diisi"
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) next.email = "Format email tidak valid"
     if (!form.pakta) next.pakta = "Anda harus menyetujui pakta integritas"
@@ -243,8 +362,14 @@ export function RegistrationForm() {
       return
     }
 
+    // Guard ganda: cek ref (sinkron, langsung akurat) sebelum cek state (bisa telat update)
+    if (submittingRef.current || submitting) return
+    submittingRef.current = true
+
     setSubmitting(true)
     setSubmitError("")
+
+    const newReferenceId = generateReferenceId()
 
     try {
       const payload = new FormData()
@@ -258,6 +383,10 @@ export function RegistrationForm() {
       payload.append("telepon", form.telepon)
       payload.append("email", form.email)
       payload.append("pakta", String(form.pakta))
+      payload.append("referenceId", newReferenceId)
+      // Anti-spam: field jebakan (harus kosong) + jarak waktu sejak form dimuat
+      payload.append("website", honeypot)
+      payload.append("formLoadedAt", String(formLoadedAt.current))
 
       if (files.abstrak) payload.append("abstrak", files.abstrak)
       files.followIg.forEach((f) => payload.append("followIg", f))
@@ -273,13 +402,17 @@ export function RegistrationForm() {
       if (!res.ok || !data.ok) {
         setSubmitError(data.message ?? "Pendaftaran gagal dikirim. Coba lagi.")
         setSubmitting(false)
+        submittingRef.current = false
         return
       }
 
+      setReferenceId(newReferenceId)
+      saveReceiptToStorage(newReferenceId, form, kategoriList.find((k) => k.value === form.kategori)?.label ?? "-")
       setSubmitted(true)
       window.scrollTo({ top: 0, behavior: "smooth" })
     } catch {
       setSubmitError("Tidak dapat terhubung ke server. Periksa koneksi internet Anda dan coba lagi.")
+      submittingRef.current = false
     } finally {
       setSubmitting(false)
     }
@@ -305,13 +438,40 @@ export function RegistrationForm() {
   }
 
   if (submitted) {
-    return <SuccessScreen form={form} perorangan={perorangan} onReset={reset} />
+    return <SuccessScreen form={form} perorangan={perorangan} onReset={reset} referenceId={referenceId} />
   }
 
   const kategoriLabel = kategoriList.find((k) => k.value === form.kategori)?.label ?? "-"
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 md:py-16">
+      {step === 0 && lastReceipt && (
+        <div className="mb-4 flex flex-col items-start gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-foreground">
+            Anda pernah mendaftar sebelumnya dengan No. Referensi{" "}
+            <span className="font-mono font-semibold">{lastReceipt.referenceId}</span>. Belum sempat menyimpan
+            buktinya?
+          </p>
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={() => downloadReceiptFile(lastReceipt)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:brightness-110"
+            >
+              <Download className="size-3.5" aria-hidden="true" />
+              Unduh
+            </button>
+            <button
+              type="button"
+              onClick={() => setLastReceipt(null)}
+              aria-label="Tutup"
+              className="inline-flex items-center justify-center rounded-lg px-2 py-1.5 text-muted-foreground hover:bg-secondary"
+            >
+              <X className="size-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      )}
       <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-xl shadow-primary/5">
         {/* Header */}
         <header className="relative overflow-hidden bg-primary px-6 py-8 md:px-10">
@@ -349,48 +509,12 @@ export function RegistrationForm() {
               >
                 <div className="grid gap-3">
                   {kategoriList.map((k) => (
-                    <button
+                    <KategoriCard
                       key={k.value}
-                      type="button"
-                      onClick={() => pickKategori(k.value)}
-                      className={cn(
-                        "group flex items-center gap-4 rounded-2xl border p-4 text-left transition-all",
-                        form.kategori === k.value
-                          ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                          : "border-input bg-background hover:border-primary/40 hover:bg-secondary/40",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "flex size-12 shrink-0 items-center justify-center rounded-xl transition-colors",
-                          form.kategori === k.value
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-secondary text-primary",
-                        )}
-                      >
-                        {k.icon}
-                      </span>
-                      <span className="flex-1">
-                        <span className="block font-heading text-base font-bold text-foreground">{k.label}</span>
-                        <span className="block text-xs text-muted-foreground">{k.desc}</span>
-                      </span>
-                      <span
-                        className={cn(
-                          "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                          k.perorangan ? "bg-accent/20 text-accent-foreground" : "bg-secondary text-muted-foreground",
-                        )}
-                      >
-                        {k.perorangan ? (
-                          <>
-                            <UserRound className="size-3" aria-hidden="true" /> Perorangan
-                          </>
-                        ) : (
-                          <>
-                            <Users className="size-3" aria-hidden="true" /> Beregu
-                          </>
-                        )}
-                      </span>
-                    </button>
+                      kategori={k}
+                      selected={form.kategori === k.value}
+                      onPick={pickKategori}
+                    />
                   ))}
                 </div>
               </Section>
@@ -408,6 +532,22 @@ export function RegistrationForm() {
                     : `Kategori ${kategoriLabel} — lengkapi informasi tim dan ketua tim`
                 }
               >
+                {/* Honeypot anti-bot: field ini disembunyikan dari manusia lewat CSS,
+                    tapi bot pengisi form otomatis biasanya tetap mengisinya.
+                    Kalau terisi, submit ditolak diam-diam di server. */}
+                <div className="absolute -left-[9999px] h-0 w-0 overflow-hidden opacity-0" aria-hidden="true">
+                  <label htmlFor="website">Jangan isi field ini</label>
+                  <input
+                    id="website"
+                    name="website"
+                    type="text"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={honeypot}
+                    onChange={(e) => setHoneypot(e.target.value)}
+                  />
+                </div>
+
                 {!perorangan && (
                   <Field label="Nama Tim" required error={errors.namaTim} icon={<Users className="size-4" />}>
                     <input
@@ -581,7 +721,7 @@ export function RegistrationForm() {
                   </p>
                   <MultiFileField
                     label="Bukti Follow Instagram"
-                    hint="Screenshot follow akun IG panitia auditphoria6.0— JPG / PNG"
+                    hint="Bukti follow akun instagram auditphoria 6.0 — Screenshot JPG / PNG · maks 10MB"
                     accept="image/png,image/jpeg"
                     icon={<AtSign className="size-4" />}
                     files={files.followIg}
@@ -591,7 +731,7 @@ export function RegistrationForm() {
                   />
                   <MultiFileField
                     label="Scan KTM / Identitas Mahasiswa"
-                    hint="Kartu Tanda Mahasiswa — JPG / PNG / PDF"
+                    hint="Kartu Tanda Mahasiswa — JPG / PNG / PDF · maks 10MB"
                     accept="image/png,image/jpeg,.pdf"
                     icon={<IdCard className="size-4" />}
                     files={files.ktm}
@@ -601,7 +741,7 @@ export function RegistrationForm() {
                   />
                   <MultiFileField
                     label="Bukti Share Poster di Grup WA"
-                    hint="Screenshot poster dibagikan ke grup WhatsApp — JPG / PNG"
+                    hint="Screenshot poster dibagikan ke grup WhatsApp — JPG / PNG · maks 10MB"
                     accept="image/png,image/jpeg"
                     icon={<MessageCircle className="size-4" />}
                     files={files.posterWa}
@@ -611,7 +751,7 @@ export function RegistrationForm() {
                   />
                   <MultiFileField
                     label="Bukti Share Poster di IG Story"
-                    hint="Screenshot poster di Instagram story — JPG / PNG"
+                    hint="Screenshot poster di Instagram story — JPG / PNG · maks 10MB"
                     accept="image/png,image/jpeg"
                     icon={<Share2 className="size-4" />}
                     files={files.posterIg}
@@ -621,7 +761,7 @@ export function RegistrationForm() {
                   />
                   <MultiFileField
                     label="Bukti Upload Twibbon"
-                    hint="Screenshot twibbon yang telah diunggah — JPG / PNG"
+                    hint="Screenshot twibbon yang telah diunggah — JPG / PNG · maks 10MB"
                     accept="image/png,image/jpeg"
                     icon={<ImageIcon className="size-4" />}
                     files={files.twibbon}
@@ -701,7 +841,7 @@ export function RegistrationForm() {
 
                 <MultiFileField
                   label="Upload Bukti Pembayaran"
-                  hint="Unggah bukti transfer — JPG / PNG / PDF"
+                  hint="Unggah bukti transfer — JPG / PNG / PDF · maks 10MB"
                   accept="image/png,image/jpeg,.pdf"
                   icon={<Upload className="size-4" />}
                   files={files.buktiBayar}
@@ -740,10 +880,10 @@ export function RegistrationForm() {
         </div>
       </div>
 
-                  <p className="mt-6 text-center text-xs text-muted-foreground">
+      <p className="mt-6 text-center text-xs text-muted-foreground">
         Butuh bantuan? Hubungi panitia Auditphoria 6.0 melalui narahubung resmi.
       </p>
-      
+      <a
         href="https://wa.me/6285137734757"
         target="_blank"
         rel="noopener noreferrer"
@@ -757,6 +897,109 @@ export function RegistrationForm() {
 }
 
 /* ---------- Sub-komponen ---------- */
+
+/**
+ * Hitung mundur menuju sebuah deadline, update setiap detik.
+ * Mengembalikan teks yang siap ditampilkan + status apakah sudah lewat.
+ */
+function useCountdown(deadline: string) {
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const target = new Date(deadline).getTime()
+  const diff = target - now
+  const expired = diff <= 0
+
+  if (expired) {
+    return { text: "Pendaftaran ditutup", expired: true }
+  }
+
+  const totalSeconds = Math.floor(diff / 1000)
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  let text: string
+  if (days > 0) text = `${days}h ${hours}j ${minutes}m lagi`
+  else if (hours > 0) text = `${hours}j ${minutes}m ${seconds}d lagi`
+  else text = `${minutes}m ${seconds}d lagi`
+
+  return { text, expired: false }
+}
+
+function KategoriCard({
+  kategori,
+  selected,
+  onPick,
+}: {
+  kategori: (typeof kategoriList)[number]
+  selected: boolean
+  onPick: (value: Exclude<Kategori, "">) => void
+}) {
+  const { text, expired } = useCountdown(kategoriDeadline[kategori.value])
+
+  return (
+    <button
+      type="button"
+      disabled={expired}
+      aria-disabled={expired}
+      onClick={() => {
+        if (!expired) onPick(kategori.value)
+      }}
+      className={cn(
+        "group flex items-center gap-4 rounded-2xl border p-4 text-left transition-all",
+        expired
+          ? "cursor-not-allowed border-border bg-secondary/30 opacity-60 grayscale"
+          : selected
+            ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+            : "border-input bg-background hover:border-primary/40 hover:bg-secondary/40",
+      )}
+    >
+      <span
+        className={cn(
+          "flex size-12 shrink-0 items-center justify-center rounded-xl transition-colors",
+          !expired && selected ? "bg-primary text-primary-foreground" : "bg-secondary text-primary",
+        )}
+      >
+        {kategori.icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-heading text-base font-bold text-foreground">{kategori.label}</span>
+        <span className="block text-xs text-muted-foreground">{kategori.desc}</span>
+        <span
+          className={cn(
+            "mt-1 flex items-center gap-1 text-[11px] font-semibold",
+            expired ? "text-destructive" : "text-primary",
+          )}
+        >
+          <Clock className="size-3" aria-hidden="true" />
+          {text}
+        </span>
+      </span>
+      <span
+        className={cn(
+          "flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+          kategori.perorangan ? "bg-accent/20 text-accent-foreground" : "bg-secondary text-muted-foreground",
+        )}
+      >
+        {kategori.perorangan ? (
+          <>
+            <UserRound className="size-3" aria-hidden="true" /> Perorangan
+          </>
+        ) : (
+          <>
+            <Users className="size-3" aria-hidden="true" /> Beregu
+          </>
+        )}
+      </span>
+    </button>
+  )
+}
 
 function Stepper({ current }: { current: number }) {
   return (
@@ -999,12 +1242,28 @@ function SuccessScreen({
   form,
   perorangan,
   onReset,
+  referenceId,
 }: {
   form: FormState
   perorangan: boolean
   onReset: () => void
+  referenceId: string
 }) {
   const kategori = kategoriList.find((k) => k.value === form.kategori)?.label ?? "-"
+
+  function handleDownload() {
+    downloadReceiptFile({
+      referenceId,
+      kategoriLabel: kategori,
+      namaTim: form.namaTim,
+      ketua: form.ketua,
+      sekolah: form.sekolah,
+      email: form.email,
+      telepon: form.telepon,
+      savedAt: new Date().toISOString(),
+    })
+  }
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-16">
       <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-xl">
@@ -1017,6 +1276,9 @@ function SuccessScreen({
             <h1 className="font-heading text-2xl font-bold text-primary-foreground text-balance">
               Pendaftaran Terkirim!
             </h1>
+            {referenceId && (
+              <p className="mt-1 font-mono text-sm text-primary-foreground/80">No. Referensi: {referenceId}</p>
+            )}
           </div>
         </div>
         <div className="px-8 py-8">
@@ -1045,13 +1307,27 @@ function SuccessScreen({
           <p className="mt-4 text-center text-xs text-muted-foreground">
             Konfirmasi lolos verifikasi akan dikirim ke email {perorangan ? "peserta" : "ketua tim"}.
           </p>
-          <button
-            type="button"
-            onClick={onReset}
-            className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-secondary px-6 py-3 font-semibold text-secondary-foreground transition-colors hover:bg-secondary/70"
-          >
-            Daftar Lagi
-          </button>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:brightness-110"
+            >
+              <Download className="size-4" aria-hidden="true" />
+              Unduh Bukti Pendaftaran
+            </button>
+            <button
+              type="button"
+              onClick={onReset}
+              className="inline-flex w-full items-center justify-center rounded-xl bg-secondary px-6 py-3 font-semibold text-secondary-foreground transition-colors hover:bg-secondary/70"
+            >
+              Daftar Lagi
+            </button>
+          </div>
+          <p className="mt-3 text-center text-[11px] text-muted-foreground">
+            Simpan file bukti ini — jangan hanya mengandalkan tampilan di layar, karena akan hilang jika halaman
+            di-refresh.
+          </p>
         </div>
       </div>
     </div>
