@@ -172,33 +172,17 @@ const BANK = {
 
 const RECEIPT_STORAGE_KEY = "auditphoria-last-registration"
 
-// URL Web App Google Apps Script — dipakai browser untuk upload berkas
-// LANGSUNG ke Apps Script (bypass limit ukuran request 4.5MB milik Vercel
-// Functions). Harus pakai prefix NEXT_PUBLIC_ supaya ke-bundle ke client,
-// dan nilainya harus SAMA PERSIS dengan APPS_SCRIPT_URL di server.
-const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL ?? ""
-
-type EncodedFile = { name: string; mimeType: string; base64: string }
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      // reader.result berformat "data:<mime>;base64,<data>" — ambil bagian setelah koma
-      resolve(result.slice(result.indexOf(",") + 1))
-    }
-    reader.onerror = () => reject(new Error(`Gagal membaca berkas "${file.name}"`))
-    reader.readAsDataURL(file)
+// Nama field yang dipakai untuk path blob di Vercel Blob (bukan URL Apps
+// Script — file sekarang diunggah ke Vercel Blob dulu, baru dipindah ke
+// Drive lewat Apps Script secara server-ke-server, supaya tidak kena limit
+// ukuran request 4.5MB milik Vercel Functions maupun isu CORS Apps Script).
+async function uploadFileToBlob(field: string, file: File, referenceId: string): Promise<string> {
+  const { upload } = await import("@vercel/blob/client")
+  const blob = await upload(`pendaftaran/${referenceId}/${field}-${file.name}`, file, {
+    access: "public",
+    handleUploadUrl: "/api/blob-upload",
   })
-}
-
-async function encodeFile(file: File): Promise<EncodedFile> {
-  return {
-    name: file.name,
-    mimeType: file.type || "application/octet-stream",
-    base64: await fileToBase64(file),
-  }
+  return blob.url
 }
 
 function generateReferenceId() {
@@ -289,6 +273,7 @@ export function RegistrationForm() {
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitPhase, setSubmitPhase] = useState<"" | "uploading" | "saving">("")
+  const [uploadProgress, setUploadProgress] = useState("")
   const [submitError, setSubmitError] = useState("")
   const [copied, setCopied] = useState(false)
   const [referenceId, setReferenceId] = useState("")
@@ -403,18 +388,12 @@ export function RegistrationForm() {
     const kategoriLabel = kategoriList.find((k) => k.value === form.kategori)?.label ?? form.kategori
 
     try {
-      if (!APPS_SCRIPT_URL) {
-        throw new Error(
-          "NEXT_PUBLIC_APPS_SCRIPT_URL belum diatur — hubungi panitia teknis (env var belum dikonfigurasi).",
-        )
-      }
-
-      // --- Tahap 1: upload semua berkas LANGSUNG ke Apps Script (bukan lewat /api/register) ---
-      // Ini yang bikin ukuran berkas tidak lagi kena limit 4.5MB milik Vercel Functions,
-      // karena bytes berkas sama sekali tidak melewati server Next.js.
+      // --- Tahap 1: upload semua berkas LANGSUNG ke Vercel Blob (bukan lewat Vercel Function) ---
+      // Ini yang bikin ukuran berkas tidak kena limit 4.5MB milik Vercel Functions —
+      // bytes berkas tidak pernah lewat /api/register sama sekali.
       setSubmitPhase("uploading")
 
-      const filesToEncode: Record<string, File[]> = {
+      const filesToUpload: Record<string, File[]> = {
         followIg: files.followIg,
         ktm: files.ktm,
         posterWa: files.posterWa,
@@ -422,67 +401,56 @@ export function RegistrationForm() {
         twibbon: files.twibbon,
         buktiBayar: files.buktiBayar,
       }
-      if (files.abstrak) filesToEncode.abstrak = [files.abstrak]
+      if (files.abstrak) filesToUpload.abstrak = [files.abstrak]
 
-      const encodedEntries = await Promise.all(
-        Object.entries(filesToEncode).map(async ([field, list]) => [field, await Promise.all(list.map(encodeFile))] as const),
-      )
-      const encodedFiles: Record<string, EncodedFile[]> = Object.fromEntries(encodedEntries)
-
-      const uploadRes = await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        // Content-Type text/plain sengaja dipakai supaya browser TIDAK mengirim
-        // preflight OPTIONS (Apps Script tidak menangani preflight dengan baik).
-        // Apps Script tetap bisa parse isinya sebagai JSON di sisi server.
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "uploadFiles",
-          referenceId: newReferenceId,
-          kategori: form.kategori,
-          kategoriLabel,
-          namaTim: form.namaTim,
-          ketua: form.ketua,
-          files: encodedFiles,
-        }),
-      })
-      const uploadData = await uploadRes.json()
-      if (!uploadRes.ok || !uploadData.ok) {
-        // eslint-disable-next-line no-console
-        console.error("[register] upload gagal:", uploadData)
-        throw new Error(uploadData.message ?? "Gagal mengunggah berkas. Coba lagi.")
+      const fieldLabel: Record<string, string> = {
+        abstrak: form.kategori ? kategoriKaryaLabel[form.kategori] : "Karya",
+        followIg: "Bukti Follow IG",
+        ktm: "KTM/Identitas",
+        posterWa: "Bukti Share Poster WA",
+        posterIg: "Bukti Share Poster IG",
+        twibbon: "Bukti Upload Twibbon",
+        buktiBayar: "Bukti Pembayaran",
       }
 
-      // Verifikasi setiap berkas wajib benar-benar punya link balik dari Apps Script,
-      // SEBELUM lanjut ke tahap simpan. Kalau tidak dicek di sini, kegagalan upload satu
-      // field (mis. karena request ke Apps Script terputus di tengah jalan) baru ketahuan
-      // di server /api/register dengan pesan generik yang membingungkan.
-      const requiredFields = Object.keys(filesToEncode)
-      const missingFields = requiredFields.filter((field) => {
-        const links = uploadData.links?.[field]
-        return !Array.isArray(links) || links.length === 0
-      })
-      if (missingFields.length > 0) {
+      let uploadedFiles = 0
+      const totalFiles = Object.values(filesToUpload).reduce((sum, list) => sum + list.length, 0)
+
+      let fileUrls: Record<string, string[]>
+      try {
+        const uploadEntries = await Promise.all(
+          Object.entries(filesToUpload).map(async ([field, list]) => {
+            const urls = await Promise.all(
+              list.map(async (file) => {
+                const url = await uploadFileToBlob(field, file, newReferenceId)
+                uploadedFiles += 1
+                setUploadProgress(`${uploadedFiles}/${totalFiles}`)
+                return url
+              }),
+            )
+            return [field, urls] as const
+          }),
+        )
+        fileUrls = Object.fromEntries(uploadEntries)
+      } catch (err) {
         // eslint-disable-next-line no-console
-        console.error("[register] field berkas tidak dapat link setelah upload:", {
-          missingFields,
-          filesToEncodeCounts: Object.fromEntries(Object.entries(filesToEncode).map(([k, v]) => [k, v.length])),
-          linksReceived: uploadData.links,
-        })
-        const fieldLabel: Record<string, string> = {
-          abstrak: form.kategori ? kategoriKaryaLabel[form.kategori] : "Karya",
-          followIg: "Bukti Follow IG",
-          ktm: "KTM/Identitas",
-          posterWa: "Bukti Share Poster WA",
-          posterIg: "Bukti Share Poster IG",
-          twibbon: "Bukti Upload Twibbon",
-          buktiBayar: "Bukti Pembayaran",
-        }
+        console.error("[register] upload ke Vercel Blob gagal:", err)
         throw new Error(
-          `Berkas "${missingFields.map((f) => fieldLabel[f] ?? f).join(", ")}" gagal terunggah saat proses upload. Berkas yang sudah Anda pilih tidak hilang — silakan coba tekan "Kirim Pendaftaran" sekali lagi.`,
+          err instanceof Error && err.message
+            ? `Gagal mengunggah berkas: ${err.message}`
+            : "Gagal mengunggah berkas. Berkas yang sudah Anda pilih tidak hilang — coba tekan Kirim Pendaftaran sekali lagi.",
         )
       }
 
-      // --- Tahap 2: kirim data teks + link berkas (kecil) ke /api/register ---
+      // Jaga-jaga: pastikan setiap field wajib benar-benar dapat URL balik.
+      const missingFields = Object.keys(filesToUpload).filter((field) => !fileUrls[field]?.length)
+      if (missingFields.length > 0) {
+        throw new Error(
+          `Berkas "${missingFields.map((f) => fieldLabel[f] ?? f).join(", ")}" gagal terunggah. Coba tekan "Kirim Pendaftaran" sekali lagi.`,
+        )
+      }
+
+      // --- Tahap 2: kirim data teks + URL blob (kecil) ke /api/register ---
       setSubmitPhase("saving")
 
       const res = await fetch("/api/register", {
@@ -503,7 +471,7 @@ export function RegistrationForm() {
           // Anti-spam: field jebakan (harus kosong) + jarak waktu sejak form dimuat
           website: honeypot,
           formLoadedAt: formLoadedAt.current,
-          fileLinks: uploadData.links,
+          fileUrls,
         }),
       })
       const data = await res.json()
@@ -529,6 +497,7 @@ export function RegistrationForm() {
     } finally {
       setSubmitting(false)
       setSubmitPhase("")
+      setUploadProgress("")
     }
   }
 
@@ -987,7 +956,7 @@ export function RegistrationForm() {
                 >
                   <CheckCircle2 className="size-5" aria-hidden="true" />
                   {submitPhase === "uploading"
-                    ? "Mengunggah berkas…"
+                    ? `Mengunggah berkas${uploadProgress ? ` (${uploadProgress})` : "…"}`
                     : submitPhase === "saving"
                       ? "Menyimpan data…"
                       : submitting
