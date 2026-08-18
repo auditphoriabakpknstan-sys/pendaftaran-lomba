@@ -21,9 +21,13 @@ const dataSchema = z.object({
   anggota2: z.string().optional().default(""),
   sekolah: z.string().min(2, "Asal sekolah/universitas wajib diisi."),
   kota: z.string().min(2, "Kota asal wajib diisi."),
-  telepon: z.string().min(8, "Nomor telepon tidak valid."),
+  telepon: z
+    .string()
+    .min(8, "Nomor telepon minimal 8 karakter.")
+    .regex(/^[0-9+\s-]{8,}$/, "Format nomor telepon tidak valid."),
   email: z.string().email("Format email tidak valid."),
   pakta: z.literal("true", { errorMap: () => ({ message: "Pakta integritas wajib disetujui." }) }),
+  referenceId: z.string().optional().default(""),
 })
 
 const FILE_FIELDS = ["abstrak", "followIg", "ktm", "posterWa", "posterIg", "twibbon", "buktiBayar"] as const
@@ -37,7 +41,28 @@ const FILE_LABELS: Record<(typeof FILE_FIELDS)[number], string> = {
   buktiBayar: "Bukti Pembayaran",
 }
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB per berkas
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB per berkas — berlaku untuk SEMUA jenis berkas
+
+// Minimal waktu (ms) antara form dimuat dan disubmit. Manusia butuh setidaknya
+// beberapa detik untuk mengisi + upload banyak berkas; bot pengisi otomatis
+// biasanya submit dalam hitungan milidetik.
+const MIN_SUBMIT_TIME_MS = 4000
+
+// Rate limit sederhana per-IP (best-effort, in-memory). Karena serverless function
+// bisa "cold start" ulang atau berjalan di banyak instance paralel, ini BUKAN
+// proteksi definitif — cukup untuk menahan bot naif yang spam dari 1 sumber.
+// Untuk proteksi lebih andal di traffic tinggi, pertimbangkan Vercel KV / Upstash.
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000 // 10 menit
+const RATE_LIMIT_MAX = 8 // maksimal 8 submit per IP per 10 menit
+const rateLimitStore = new Map<string, number[]>()
+
+function isRateLimited(ip: string) {
+  const now = Date.now()
+  const timestamps = (rateLimitStore.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
+  timestamps.push(now)
+  rateLimitStore.set(ip, timestamps)
+  return timestamps.length > RATE_LIMIT_MAX
+}
 
 type EncodedFile = { name: string; mimeType: string; base64: string }
 
@@ -48,7 +73,37 @@ export async function POST(req: Request) {
       throw new Error("APPS_SCRIPT_URL belum diatur di environment variables.")
     }
 
+    // --- Rate limit per IP ---
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      req.headers.get("x-real-ip") ||
+      "unknown"
+    if (isRateLimited(ip)) {
+      return NextResponse.json(
+        { ok: false, message: "Terlalu banyak percobaan. Coba lagi dalam beberapa menit." },
+        { status: 429 },
+      )
+    }
+
     const formData = await req.formData()
+
+    // --- Anti-bot: honeypot ---
+    // Field "website" disembunyikan dari manusia lewat CSS. Kalau terisi,
+    // hampir pasti itu bot pengisi form otomatis. Ditolak diam-diam (tanpa
+    // membocorkan alasan sebenarnya ke pemanggil, supaya bot tidak belajar).
+    const honeypot = String(formData.get("website") ?? "")
+    if (honeypot.trim() !== "") {
+      return NextResponse.json({ ok: false, message: "Pendaftaran gagal dikirim. Coba lagi." }, { status: 400 })
+    }
+
+    // --- Anti-bot: waktu pengisian ---
+    const formLoadedAt = Number(formData.get("formLoadedAt") ?? 0)
+    if (formLoadedAt > 0 && Date.now() - formLoadedAt < MIN_SUBMIT_TIME_MS) {
+      return NextResponse.json(
+        { ok: false, message: "Pengisian terlalu cepat, silakan coba lagi." },
+        { status: 400 },
+      )
+    }
 
     const raw = {
       kategori: String(formData.get("kategori") ?? ""),
@@ -61,6 +116,7 @@ export async function POST(req: Request) {
       telepon: String(formData.get("telepon") ?? ""),
       email: String(formData.get("email") ?? ""),
       pakta: String(formData.get("pakta") ?? ""),
+      referenceId: String(formData.get("referenceId") ?? ""),
     }
 
     const parsed = dataSchema.safeParse(raw)
@@ -105,6 +161,7 @@ export async function POST(req: Request) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        referenceId: data.referenceId,
         kategori: data.kategori,
         kategoriLabel: KATEGORI_LABEL[data.kategori] ?? data.kategori,
         namaTim: data.namaTim,
