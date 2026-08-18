@@ -447,7 +447,39 @@ export function RegistrationForm() {
       })
       const uploadData = await uploadRes.json()
       if (!uploadRes.ok || !uploadData.ok) {
+        // eslint-disable-next-line no-console
+        console.error("[register] upload gagal:", uploadData)
         throw new Error(uploadData.message ?? "Gagal mengunggah berkas. Coba lagi.")
+      }
+
+      // Verifikasi setiap berkas wajib benar-benar punya link balik dari Apps Script,
+      // SEBELUM lanjut ke tahap simpan. Kalau tidak dicek di sini, kegagalan upload satu
+      // field (mis. karena request ke Apps Script terputus di tengah jalan) baru ketahuan
+      // di server /api/register dengan pesan generik yang membingungkan.
+      const requiredFields = Object.keys(filesToEncode)
+      const missingFields = requiredFields.filter((field) => {
+        const links = uploadData.links?.[field]
+        return !Array.isArray(links) || links.length === 0
+      })
+      if (missingFields.length > 0) {
+        // eslint-disable-next-line no-console
+        console.error("[register] field berkas tidak dapat link setelah upload:", {
+          missingFields,
+          filesToEncodeCounts: Object.fromEntries(Object.entries(filesToEncode).map(([k, v]) => [k, v.length])),
+          linksReceived: uploadData.links,
+        })
+        const fieldLabel: Record<string, string> = {
+          abstrak: form.kategori ? kategoriKaryaLabel[form.kategori] : "Karya",
+          followIg: "Bukti Follow IG",
+          ktm: "KTM/Identitas",
+          posterWa: "Bukti Share Poster WA",
+          posterIg: "Bukti Share Poster IG",
+          twibbon: "Bukti Upload Twibbon",
+          buktiBayar: "Bukti Pembayaran",
+        }
+        throw new Error(
+          `Berkas "${missingFields.map((f) => fieldLabel[f] ?? f).join(", ")}" gagal terunggah saat proses upload. Berkas yang sudah Anda pilih tidak hilang — silakan coba tekan "Kirim Pendaftaran" sekali lagi.`,
+        )
       }
 
       // --- Tahap 2: kirim data teks + link berkas (kecil) ke /api/register ---
