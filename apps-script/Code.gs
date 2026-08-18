@@ -1,3 +1,24 @@
+/**
+ * APPS SCRIPT — PENDAFTARAN AUDITPHORIA 6.0
+ * ==========================================
+ * Cara pakai:
+ * 1. Buka Google Sheet tujuan (tab pertama HARUS bernama "Peserta").
+ * 2. Menu Extensions > Apps Script.
+ * 3. Hapus semua kode default, tempel seluruh isi file ini.
+ * 4. Isi DRIVE_FOLDER_ID di bawah dengan ID folder Drive tujuan berkas
+ *    (buat folder baru di Drive Anda, ambil ID dari URL-nya).
+ * 5. Klik Deploy > New deployment > pilih tipe "Web app".
+ *      - Execute as: Me
+ *      - Who has access: Anyone
+ * 6. Klik Deploy, copy URL Web App yang muncul.
+ * 7. Tempel URL itu ke environment variable APPS_SCRIPT_URL di Vercel.
+ *
+ * Setiap submit otomatis dicatat 2x:
+ * - Tab "Peserta" (master, berisi SEMUA peserta dari semua kategori)
+ * - Tab sesuai nama kategori lombanya (dibuat otomatis kalau belum ada,
+ *   header-nya ikut disalin dari tab Peserta)
+ */
+
 const SHEET_NAME = "Peserta"
 const DRIVE_FOLDER_ID = "1nbNAChSpVAaSXwNm3R53Q20NGVwuiSA1"
 
@@ -97,6 +118,7 @@ function doPost(e) {
 
     const row = [
       new Date(),
+      data.referenceId || "",
       data.kategoriLabel || data.kategori || "",
       data.namaTim || "",
       data.ketua || "",
