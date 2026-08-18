@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { del } from "@vercel/blob"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -23,12 +24,13 @@ const FILE_LABELS: Record<(typeof FILE_FIELDS)[number], string> = {
 }
 
 // CATATAN ARSITEKTUR:
-// Berkas TIDAK lagi dikirim ke endpoint ini. Browser mengunggah berkas
-// langsung ke Google Apps Script (lihat NEXT_PUBLIC_APPS_SCRIPT_URL di
-// registration-form.tsx) supaya tidak kena limit ukuran request 4.5MB
-// milik Vercel Functions. Endpoint ini hanya menerima data teks + link
-// hasil upload tadi, lalu meneruskannya ke Apps Script untuk dicatat ke
-// Google Sheet. Karena itu payload di sini selalu kecil.
+// Berkas TIDAK lewat endpoint ini sama sekali. Browser mengunggahnya
+// LANGSUNG ke Vercel Blob (lihat app/api/blob-upload/route.ts), jadi tidak
+// pernah kena limit ukuran request 4.5MB milik Vercel Functions. Endpoint
+// ini hanya menerima data teks + URL blob hasil upload tadi (payload kecil),
+// meneruskannya ke Apps Script (server-ke-server, jadi tidak ada isu CORS),
+// lalu menghapus blob sementara setelah Apps Script konfirmasi berhasil
+// menyalinnya ke Google Drive.
 const dataSchema = z.object({
   kategori: z.enum(["essay", "policy", "order", "infografis"], {
     errorMap: () => ({ message: "Kategori lomba tidak valid." }),
@@ -48,7 +50,7 @@ const dataSchema = z.object({
   referenceId: z.string().optional().default(""),
   website: z.string().optional().default(""), // honeypot
   formLoadedAt: z.number().optional().default(0),
-  fileLinks: z.record(z.array(z.string())).optional().default({}),
+  fileUrls: z.record(z.array(z.string())).optional().default({}),
 })
 
 // Minimal waktu (ms) antara form dimuat dan disubmit. Manusia butuh setidaknya
@@ -94,9 +96,6 @@ export async function POST(req: Request) {
     const body = await req.json()
 
     // --- Anti-bot: honeypot ---
-    // Field "website" disembunyikan dari manusia lewat CSS. Kalau terisi,
-    // hampir pasti itu bot pengisi form otomatis. Ditolak diam-diam (tanpa
-    // membocorkan alasan sebenarnya ke pemanggil, supaya bot tidak belajar).
     const honeypot = String(body?.website ?? "")
     if (honeypot.trim() !== "") {
       return NextResponse.json({ ok: false, message: "Pendaftaran gagal dikirim. Coba lagi." }, { status: 400 })
@@ -118,10 +117,10 @@ export async function POST(req: Request) {
       )
     }
 
-    // --- Pastikan semua berkas wajib sudah diunggah (link-nya sudah ada) ---
+    // --- Pastikan semua berkas wajib sudah diunggah ke Blob (URL-nya sudah ada) ---
     for (const field of FILE_FIELDS) {
-      const links = data.fileLinks[field]
-      if (!links || links.length === 0) {
+      const urls = data.fileUrls[field]
+      if (!urls || urls.length === 0) {
         return NextResponse.json(
           { ok: false, message: `Berkas "${FILE_LABELS[field]}" wajib diunggah.` },
           { status: 400 },
@@ -133,7 +132,6 @@ export async function POST(req: Request) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        action: "submit",
         referenceId: data.referenceId,
         kategori: data.kategori,
         kategoriLabel: KATEGORI_LABEL[data.kategori] ?? data.kategori,
@@ -145,7 +143,7 @@ export async function POST(req: Request) {
         kota: data.kota,
         telepon: data.telepon,
         email: data.email,
-        fileLinks: data.fileLinks,
+        fileUrls: data.fileUrls,
       }),
       redirect: "follow",
     })
@@ -164,6 +162,12 @@ export async function POST(req: Request) {
         { status: 502 },
       )
     }
+
+    // Apps Script sudah menyalin semua berkas ke Drive — hapus salinan
+    // sementara di Vercel Blob (best-effort, tidak menggagalkan request
+    // utama kalau ada satu-dua yang gagal dihapus).
+    const allBlobUrls = Object.values(data.fileUrls).flat()
+    await Promise.allSettled(allBlobUrls.map((url) => del(url)))
 
     return NextResponse.json({ ok: true, message: result.message ?? "Pendaftaran berhasil dikirim." })
   } catch (error) {
