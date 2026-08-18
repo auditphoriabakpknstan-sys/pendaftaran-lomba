@@ -172,6 +172,35 @@ const BANK = {
 
 const RECEIPT_STORAGE_KEY = "auditphoria-last-registration"
 
+// URL Web App Google Apps Script — dipakai browser untuk upload berkas
+// LANGSUNG ke Apps Script (bypass limit ukuran request 4.5MB milik Vercel
+// Functions). Harus pakai prefix NEXT_PUBLIC_ supaya ke-bundle ke client,
+// dan nilainya harus SAMA PERSIS dengan APPS_SCRIPT_URL di server.
+const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL ?? ""
+
+type EncodedFile = { name: string; mimeType: string; base64: string }
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      // reader.result berformat "data:<mime>;base64,<data>" — ambil bagian setelah koma
+      resolve(result.slice(result.indexOf(",") + 1))
+    }
+    reader.onerror = () => reject(new Error(`Gagal membaca berkas "${file.name}"`))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function encodeFile(file: File): Promise<EncodedFile> {
+  return {
+    name: file.name,
+    mimeType: file.type || "application/octet-stream",
+    base64: await fileToBase64(file),
+  }
+}
+
 function generateReferenceId() {
   const rand = Math.random().toString(36).slice(2, 8).toUpperCase()
   const date = new Date()
@@ -259,6 +288,7 @@ export function RegistrationForm() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [submitPhase, setSubmitPhase] = useState<"" | "uploading" | "saving">("")
   const [submitError, setSubmitError] = useState("")
   const [copied, setCopied] = useState(false)
   const [referenceId, setReferenceId] = useState("")
@@ -370,33 +400,80 @@ export function RegistrationForm() {
     setSubmitError("")
 
     const newReferenceId = generateReferenceId()
+    const kategoriLabel = kategoriList.find((k) => k.value === form.kategori)?.label ?? form.kategori
 
     try {
-      const payload = new FormData()
-      payload.append("kategori", form.kategori)
-      payload.append("namaTim", form.namaTim)
-      payload.append("ketua", form.ketua)
-      payload.append("anggota1", form.anggota1)
-      payload.append("anggota2", form.anggota2)
-      payload.append("sekolah", form.sekolah)
-      payload.append("kota", form.kota)
-      payload.append("telepon", form.telepon)
-      payload.append("email", form.email)
-      payload.append("pakta", String(form.pakta))
-      payload.append("referenceId", newReferenceId)
-      // Anti-spam: field jebakan (harus kosong) + jarak waktu sejak form dimuat
-      payload.append("website", honeypot)
-      payload.append("formLoadedAt", String(formLoadedAt.current))
+      if (!APPS_SCRIPT_URL) {
+        throw new Error(
+          "NEXT_PUBLIC_APPS_SCRIPT_URL belum diatur — hubungi panitia teknis (env var belum dikonfigurasi).",
+        )
+      }
 
-      if (files.abstrak) payload.append("abstrak", files.abstrak)
-      files.followIg.forEach((f) => payload.append("followIg", f))
-      files.ktm.forEach((f) => payload.append("ktm", f))
-      files.posterWa.forEach((f) => payload.append("posterWa", f))
-      files.posterIg.forEach((f) => payload.append("posterIg", f))
-      files.twibbon.forEach((f) => payload.append("twibbon", f))
-      files.buktiBayar.forEach((f) => payload.append("buktiBayar", f))
+      // --- Tahap 1: upload semua berkas LANGSUNG ke Apps Script (bukan lewat /api/register) ---
+      // Ini yang bikin ukuran berkas tidak lagi kena limit 4.5MB milik Vercel Functions,
+      // karena bytes berkas sama sekali tidak melewati server Next.js.
+      setSubmitPhase("uploading")
 
-      const res = await fetch("/api/register", { method: "POST", body: payload })
+      const filesToEncode: Record<string, File[]> = {
+        followIg: files.followIg,
+        ktm: files.ktm,
+        posterWa: files.posterWa,
+        posterIg: files.posterIg,
+        twibbon: files.twibbon,
+        buktiBayar: files.buktiBayar,
+      }
+      if (files.abstrak) filesToEncode.abstrak = [files.abstrak]
+
+      const encodedEntries = await Promise.all(
+        Object.entries(filesToEncode).map(async ([field, list]) => [field, await Promise.all(list.map(encodeFile))] as const),
+      )
+      const encodedFiles: Record<string, EncodedFile[]> = Object.fromEntries(encodedEntries)
+
+      const uploadRes = await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        // Content-Type text/plain sengaja dipakai supaya browser TIDAK mengirim
+        // preflight OPTIONS (Apps Script tidak menangani preflight dengan baik).
+        // Apps Script tetap bisa parse isinya sebagai JSON di sisi server.
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "uploadFiles",
+          referenceId: newReferenceId,
+          kategori: form.kategori,
+          kategoriLabel,
+          namaTim: form.namaTim,
+          ketua: form.ketua,
+          files: encodedFiles,
+        }),
+      })
+      const uploadData = await uploadRes.json()
+      if (!uploadRes.ok || !uploadData.ok) {
+        throw new Error(uploadData.message ?? "Gagal mengunggah berkas. Coba lagi.")
+      }
+
+      // --- Tahap 2: kirim data teks + link berkas (kecil) ke /api/register ---
+      setSubmitPhase("saving")
+
+      const res = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kategori: form.kategori,
+          namaTim: form.namaTim,
+          ketua: form.ketua,
+          anggota1: form.anggota1,
+          anggota2: form.anggota2,
+          sekolah: form.sekolah,
+          kota: form.kota,
+          telepon: form.telepon,
+          email: form.email,
+          pakta: String(form.pakta),
+          referenceId: newReferenceId,
+          // Anti-spam: field jebakan (harus kosong) + jarak waktu sejak form dimuat
+          website: honeypot,
+          formLoadedAt: formLoadedAt.current,
+          fileLinks: uploadData.links,
+        }),
+      })
       const data = await res.json()
 
       if (!res.ok || !data.ok) {
@@ -407,14 +484,19 @@ export function RegistrationForm() {
       }
 
       setReferenceId(newReferenceId)
-      saveReceiptToStorage(newReferenceId, form, kategoriList.find((k) => k.value === form.kategori)?.label ?? "-")
+      saveReceiptToStorage(newReferenceId, form, kategoriLabel)
       setSubmitted(true)
       window.scrollTo({ top: 0, behavior: "smooth" })
-    } catch {
-      setSubmitError("Tidak dapat terhubung ke server. Periksa koneksi internet Anda dan coba lagi.")
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Tidak dapat terhubung ke server. Periksa koneksi internet Anda dan coba lagi.",
+      )
       submittingRef.current = false
     } finally {
       setSubmitting(false)
+      setSubmitPhase("")
     }
   }
 
@@ -872,7 +954,13 @@ export function RegistrationForm() {
                   className={cn(primaryBtn, "flex-1", submitting && "opacity-70 pointer-events-none")}
                 >
                   <CheckCircle2 className="size-5" aria-hidden="true" />
-                  {submitting ? "Mengirim…" : "Kirim Pendaftaran"}
+                  {submitPhase === "uploading"
+                    ? "Mengunggah berkas…"
+                    : submitPhase === "saving"
+                      ? "Menyimpan data…"
+                      : submitting
+                        ? "Mengirim…"
+                        : "Kirim Pendaftaran"}
                 </button>
               </div>
             </div>
