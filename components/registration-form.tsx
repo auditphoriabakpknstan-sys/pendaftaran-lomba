@@ -740,17 +740,17 @@ export function RegistrationForm() {
         </div>
       </div>
 
-            <p className="mt-6 text-center text-xs text-muted-foreground">
+                  <p className="mt-6 text-center text-xs text-muted-foreground">
         Butuh bantuan? Hubungi panitia Auditphoria 6.0 melalui narahubung resmi.
       </p>
       
-        href="https://wa.me/625137734757"
+        href="https://wa.me/6285137734757"
         target="_blank"
         rel="noopener noreferrer"
         className="mt-2 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary hover:underline"
       >
         <MessageCircle className="size-4" aria-hidden="true" />
-        +62 5137734757
+        +62 8513 7734 757 (Stefan)
       </a>
     </div>
   )
