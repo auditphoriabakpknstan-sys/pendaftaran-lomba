@@ -10,21 +10,26 @@
  * 5. Klik Deploy > New deployment > pilih tipe "Web app".
  *      - Execute as: Me
  *      - Who has access: Anyone
- * 6. Klik Deploy, copy URL Web App yang muncul.
- * 7. Tempel URL itu ke DUA environment variable di Vercel:
- *      - APPS_SCRIPT_URL             (dipakai server, tanpa NEXT_PUBLIC_)
- *      - NEXT_PUBLIC_APPS_SCRIPT_URL (dipakai browser untuk upload berkas
- *        langsung, WAJIB pakai prefix NEXT_PUBLIC_ supaya ke-bundle ke client)
- *    Nilainya SAMA PERSIS, cuma nama variabelnya beda dua.
+ * 6. Klik Deploy, copy URL Web App yang muncul, tempel ke env var
+ *    APPS_SCRIPT_URL di Vercel.
  *
- * ALUR BARU (2 tahap, supaya tidak kena limit 4.5MB Vercel):
- * 1. Browser mengirim SEMUA berkas langsung ke Web App ini
- *    (action: "uploadFiles") — tidak lewat server Next.js sama sekali.
- *    Apps Script mengunggahnya ke Drive dan membalas link setiap berkas.
- * 2. Browser lalu mengirim data teks + link-link tadi ke /api/register
- *    (Next.js) yang meneruskannya ke Web App ini lagi (action: "submit")
- *    untuk dicatat ke Google Sheet. Payload tahap ini kecil (cuma teks),
- *    jadi tidak pernah mendekati limit ukuran request Vercel.
+ * ARSITEKTUR (final):
+ * 1. Browser mengunggah berkas LANGSUNG ke Vercel Blob (bukan ke sini,
+ *    bukan lewat Vercel Function) — jadi tidak kena limit ukuran request
+ *    4.5MB milik Vercel Functions.
+ * 2. Browser mengirim URL-URL blob tadi + data teks ke /api/register
+ *    (Next.js, same-origin, payloadnya kecil).
+ * 3. /api/register meneruskan URL-URL itu ke Web App INI (server-ke-server,
+ *    jadi TIDAK kena masalah CORS browser). Kode di bawah ini yang
+ *    mengunduh file dari Vercel Blob pakai UrlFetchApp, menyimpannya ke
+ *    Drive, lalu mencatat baris ke Google Sheet.
+ * 4. Setelah sukses, /api/register menghapus file sementara di Vercel
+ *    Blob (Drive sudah punya salinan permanennya).
+ *
+ * PENTING: Web App ini TIDAK PERNAH dipanggil langsung dari browser lagi
+ * (itu yang dulu bikin error "Failed to fetch" — Apps Script Web App tidak
+ * bisa mengatur header CORS di responsnya). Sekarang satu-satunya pemanggil
+ * adalah server Next.js Anda, jadi CORS tidak relevan lagi.
  *
  * Setiap submit otomatis dicatat 2x:
  * - Tab "Peserta" (master, berisi SEMUA peserta dari semua kategori)
@@ -35,7 +40,7 @@
 const SHEET_NAME = "Peserta"
 const DRIVE_FOLDER_ID = "1nbNAChSpVAaSXwNm3R53Q20NGVwuiSA1"
 
-const FILE_UPLOAD_LABEL = {
+const FILE_LABELS = {
   abstrak: "Karya - Abstrak",
   followIg: "Bukti Follow IG",
   ktm: "KTM - Identitas",
@@ -48,11 +53,6 @@ const FILE_UPLOAD_LABEL = {
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents)
-    const action = data.action || "submit"
-
-    if (action === "uploadFiles") {
-      return jsonOutput(handleUploadFiles(data))
-    }
     return jsonOutput(handleSubmit(data))
   } catch (err) {
     return jsonOutput({ ok: false, message: String(err) })
@@ -79,11 +79,6 @@ function getOrCreateCategoryFolder(parentFolder, categoryName) {
   return parentFolder.createFolder(name)
 }
 
-/**
- * Ambil folder submission di dalam folder kategori, dikunci lewat referenceId
- * supaya panggilan "uploadFiles" (bisa lebih dari sekali kalau ada retry) dan
- * pembacaan berikutnya selalu jatuh ke folder yang sama.
- */
 function getOrCreateSubmissionFolder(categoryFolder, referenceId, labelHint) {
   const folderName = safeName((labelHint || "Peserta") + " - " + (referenceId || "TANPA-REF"))
   const existing = categoryFolder.getFoldersByName(folderName)
@@ -93,12 +88,6 @@ function getOrCreateSubmissionFolder(categoryFolder, referenceId, labelHint) {
   const folder = categoryFolder.createFolder(folderName)
   folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW)
   return folder
-}
-
-function getExt(name) {
-  if (!name) return ""
-  const idx = name.lastIndexOf(".")
-  return idx >= 0 ? name.substring(idx) : ""
 }
 
 function toWaLink(phone) {
@@ -112,14 +101,35 @@ function toWaLink(phone) {
   return "wa.me/" + digits
 }
 
-function uploadGroup(subFolder, label, filesArr) {
+/** Tebak ekstensi file dari URL blob atau dari Content-Type hasil download. */
+function guessExtension(url, blob) {
+  const fromUrl = String(url || "").match(/\.([a-zA-Z0-9]{2,5})(?:\?|$)/)
+  if (fromUrl) return "." + fromUrl[1]
+  const ct = (blob && blob.getContentType && blob.getContentType()) || ""
+  if (ct.indexOf("pdf") !== -1) return ".pdf"
+  if (ct.indexOf("png") !== -1) return ".png"
+  if (ct.indexOf("jpeg") !== -1 || ct.indexOf("jpg") !== -1) return ".jpg"
+  if (ct.indexOf("webp") !== -1) return ".webp"
+  return ""
+}
+
+/**
+ * Unduh sekumpulan berkas dari Vercel Blob (server-ke-server, tanpa isu CORS)
+ * lalu simpan permanen ke folder submission di Drive.
+ */
+function downloadAndSaveGroup(subFolder, label, urls) {
   const links = []
-  if (!filesArr || !filesArr.length) return links
-  filesArr.forEach(function (f, i) {
-    if (!f || !f.base64) return
-    const bytes = Utilities.base64Decode(f.base64)
-    const fileName = (filesArr.length > 1 ? label + " " + (i + 1) : label) + getExt(f.name)
-    const blob = Utilities.newBlob(bytes, f.mimeType || "application/octet-stream", fileName)
+  if (!urls || !urls.length) return links
+  urls.forEach(function (url, i) {
+    if (!url) return
+    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true })
+    if (response.getResponseCode() !== 200) {
+      throw new Error('Gagal mengunduh berkas "' + label + '" dari penyimpanan sementara (kode ' + response.getResponseCode() + ").")
+    }
+    const blob = response.getBlob()
+    const ext = guessExtension(url, blob)
+    const fileName = (urls.length > 1 ? label + " " + (i + 1) : label) + ext
+    blob.setName(fileName)
     const file = subFolder.createFile(blob)
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW)
     links.push(file.getUrl())
@@ -133,8 +143,6 @@ function uploadGroup(subFolder, label, filesArr) {
  */
 function getOrCreateCategorySheet(ss, masterSheet, categoryName) {
   if (!categoryName) return null
-  // Nama tab di Google Sheets tidak boleh lebih dari 100 karakter
-  // dan tidak boleh mengandung: [ ] * ? / \ :
   const name = String(categoryName).replace(/[\[\]*?\/\\:]/g, "").substring(0, 100)
   let categorySheet = ss.getSheetByName(name)
   if (!categorySheet) {
@@ -150,37 +158,9 @@ function getOrCreateCategorySheet(ss, masterSheet, categoryName) {
 }
 
 /**
- * TAHAP 1 — dipanggil LANGSUNG dari browser (tidak lewat Next.js), supaya
- * ukuran berkas tidak kena limit 4.5MB milik Vercel Functions.
- * Input:  { action:"uploadFiles", referenceId, kategori, kategoriLabel,
- *           namaTim, ketua, files: { fieldName: [{name,mimeType,base64}] } }
- * Output: { ok:true, links: { fieldName: ["url1", "url2", ...] } }
- */
-function handleUploadFiles(data) {
-  const parentFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID)
-  const categoryFolder = getOrCreateCategoryFolder(parentFolder, data.kategoriLabel || data.kategori)
-  const submissionFolder = getOrCreateSubmissionFolder(
-    categoryFolder,
-    data.referenceId,
-    data.namaTim || data.ketua,
-  )
-
-  const files = data.files || {}
-  const links = {}
-  Object.keys(files).forEach(function (field) {
-    const label = FILE_UPLOAD_LABEL[field] || field
-    links[field] = uploadGroup(submissionFolder, label, files[field])
-  })
-
-  return { ok: true, links: links }
-}
-
-/**
- * TAHAP 2 — dipanggil dari /api/register (Next.js) setelah berkas selesai
- * diunggah di tahap 1. Payload di sini cuma teks + link, jadi kecil.
- * Input: { action:"submit", referenceId, kategori, kategoriLabel, namaTim,
- *          ketua, anggota1, anggota2, sekolah, kota, telepon, email,
- *          fileLinks: { fieldName: ["url", ...] } }
+ * Input: { referenceId, kategori, kategoriLabel, namaTim, ketua, anggota1,
+ *          anggota2, sekolah, kota, telepon, email,
+ *          fileUrls: { fieldName: ["https://...blob.vercel-storage.com/...", ...] } }
  */
 function handleSubmit(data) {
   const ss = SpreadsheetApp.getActiveSpreadsheet()
@@ -189,11 +169,26 @@ function handleSubmit(data) {
     throw new Error('Tab bernama "' + SHEET_NAME + '" tidak ditemukan di spreadsheet ini.')
   }
 
-  const links = data.fileLinks || {}
-  function joined(field) {
-    const arr = links[field] || []
-    return arr.join("\n")
+  const parentFolder = DriveApp.getFolderById(DRIVE_FOLDER_ID)
+  const categoryFolder = getOrCreateCategoryFolder(parentFolder, data.kategoriLabel || data.kategori)
+  const submissionFolder = getOrCreateSubmissionFolder(
+    categoryFolder,
+    data.referenceId,
+    data.namaTim || data.ketua,
+  )
+
+  const fileUrls = data.fileUrls || {}
+  function saveGroup(field) {
+    return downloadAndSaveGroup(submissionFolder, FILE_LABELS[field] || field, fileUrls[field])
   }
+
+  const linkAbstrak = saveGroup("abstrak")
+  const linkFollowIg = saveGroup("followIg")
+  const linkKtm = saveGroup("ktm")
+  const linkPosterWa = saveGroup("posterWa")
+  const linkPosterIg = saveGroup("posterIg")
+  const linkTwibbon = saveGroup("twibbon")
+  const linkBuktiBayar = saveGroup("buktiBayar")
 
   const row = [
     new Date(),
@@ -207,13 +202,13 @@ function handleSubmit(data) {
     data.kota || "",
     toWaLink(data.telepon),
     data.email || "",
-    joined("abstrak"),
-    joined("followIg"),
-    joined("ktm"),
-    joined("posterWa"),
-    joined("posterIg"),
-    joined("twibbon"),
-    joined("buktiBayar"),
+    linkAbstrak.join("\n"),
+    linkFollowIg.join("\n"),
+    linkKtm.join("\n"),
+    linkPosterWa.join("\n"),
+    linkPosterIg.join("\n"),
+    linkTwibbon.join("\n"),
+    linkBuktiBayar.join("\n"),
   ]
 
   // 1. Catat ke tab master "Peserta"
