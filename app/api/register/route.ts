@@ -11,6 +11,24 @@ const KATEGORI_LABEL: Record<string, string> = {
   infografis: "Audit Infografis",
 }
 
+const FILE_FIELDS = ["abstrak", "followIg", "ktm", "posterWa", "posterIg", "twibbon", "buktiBayar"] as const
+const FILE_LABELS: Record<(typeof FILE_FIELDS)[number], string> = {
+  abstrak: "Karya - Abstrak",
+  followIg: "Bukti Follow IG",
+  ktm: "KTM - Identitas",
+  posterWa: "Bukti Share Poster WA",
+  posterIg: "Bukti Share Poster IG",
+  twibbon: "Bukti Upload Twibbon",
+  buktiBayar: "Bukti Pembayaran",
+}
+
+// CATATAN ARSITEKTUR:
+// Berkas TIDAK lagi dikirim ke endpoint ini. Browser mengunggah berkas
+// langsung ke Google Apps Script (lihat NEXT_PUBLIC_APPS_SCRIPT_URL di
+// registration-form.tsx) supaya tidak kena limit ukuran request 4.5MB
+// milik Vercel Functions. Endpoint ini hanya menerima data teks + link
+// hasil upload tadi, lalu meneruskannya ke Apps Script untuk dicatat ke
+// Google Sheet. Karena itu payload di sini selalu kecil.
 const dataSchema = z.object({
   kategori: z.enum(["essay", "policy", "order", "infografis"], {
     errorMap: () => ({ message: "Kategori lomba tidak valid." }),
@@ -28,20 +46,10 @@ const dataSchema = z.object({
   email: z.string().email("Format email tidak valid."),
   pakta: z.literal("true", { errorMap: () => ({ message: "Pakta integritas wajib disetujui." }) }),
   referenceId: z.string().optional().default(""),
+  website: z.string().optional().default(""), // honeypot
+  formLoadedAt: z.number().optional().default(0),
+  fileLinks: z.record(z.array(z.string())).optional().default({}),
 })
-
-const FILE_FIELDS = ["abstrak", "followIg", "ktm", "posterWa", "posterIg", "twibbon", "buktiBayar"] as const
-const FILE_LABELS: Record<(typeof FILE_FIELDS)[number], string> = {
-  abstrak: "Karya - Abstrak",
-  followIg: "Bukti Follow IG",
-  ktm: "KTM - Identitas",
-  posterWa: "Bukti Share Poster WA",
-  posterIg: "Bukti Share Poster IG",
-  twibbon: "Bukti Upload Twibbon",
-  buktiBayar: "Bukti Pembayaran",
-}
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB per berkas — berlaku untuk SEMUA jenis berkas
 
 // Minimal waktu (ms) antara form dimuat dan disubmit. Manusia butuh setidaknya
 // beberapa detik untuk mengisi + upload banyak berkas; bot pengisi otomatis
@@ -64,8 +72,6 @@ function isRateLimited(ip: string) {
   return timestamps.length > RATE_LIMIT_MAX
 }
 
-type EncodedFile = { name: string; mimeType: string; base64: string }
-
 export async function POST(req: Request) {
   try {
     const scriptUrl = process.env.APPS_SCRIPT_URL
@@ -85,82 +91,49 @@ export async function POST(req: Request) {
       )
     }
 
-    const formData = await req.formData()
+    const body = await req.json()
 
     // --- Anti-bot: honeypot ---
     // Field "website" disembunyikan dari manusia lewat CSS. Kalau terisi,
     // hampir pasti itu bot pengisi form otomatis. Ditolak diam-diam (tanpa
     // membocorkan alasan sebenarnya ke pemanggil, supaya bot tidak belajar).
-    const honeypot = String(formData.get("website") ?? "")
+    const honeypot = String(body?.website ?? "")
     if (honeypot.trim() !== "") {
       return NextResponse.json({ ok: false, message: "Pendaftaran gagal dikirim. Coba lagi." }, { status: 400 })
     }
 
+    const parsed = dataSchema.safeParse(body)
+    if (!parsed.success) {
+      const firstError = parsed.error.issues[0]?.message ?? "Data belum lengkap."
+      return NextResponse.json({ ok: false, message: firstError }, { status: 400 })
+    }
+
+    const data = parsed.data
+
     // --- Anti-bot: waktu pengisian ---
-    const formLoadedAt = Number(formData.get("formLoadedAt") ?? 0)
-    if (formLoadedAt > 0 && Date.now() - formLoadedAt < MIN_SUBMIT_TIME_MS) {
+    if (data.formLoadedAt > 0 && Date.now() - data.formLoadedAt < MIN_SUBMIT_TIME_MS) {
       return NextResponse.json(
         { ok: false, message: "Pengisian terlalu cepat, silakan coba lagi." },
         { status: 400 },
       )
     }
 
-    const raw = {
-      kategori: String(formData.get("kategori") ?? ""),
-      namaTim: String(formData.get("namaTim") ?? ""),
-      ketua: String(formData.get("ketua") ?? ""),
-      anggota1: String(formData.get("anggota1") ?? ""),
-      anggota2: String(formData.get("anggota2") ?? ""),
-      sekolah: String(formData.get("sekolah") ?? ""),
-      kota: String(formData.get("kota") ?? ""),
-      telepon: String(formData.get("telepon") ?? ""),
-      email: String(formData.get("email") ?? ""),
-      pakta: String(formData.get("pakta") ?? ""),
-      referenceId: String(formData.get("referenceId") ?? ""),
-    }
-
-    const parsed = dataSchema.safeParse(raw)
-    if (!parsed.success) {
-      const firstError = parsed.error.issues[0]?.message ?? "Data belum lengkap."
-      return NextResponse.json({ ok: false, message: firstError }, { status: 400 })
-    }
-
-    const filesPayload: Record<string, EncodedFile[]> = {}
-
+    // --- Pastikan semua berkas wajib sudah diunggah (link-nya sudah ada) ---
     for (const field of FILE_FIELDS) {
-      const files = formData.getAll(field).filter((f): f is File => f instanceof File && f.size > 0)
-
-      if (files.length === 0) {
+      const links = data.fileLinks[field]
+      if (!links || links.length === 0) {
         return NextResponse.json(
           { ok: false, message: `Berkas "${FILE_LABELS[field]}" wajib diunggah.` },
           { status: 400 },
         )
       }
-
-      const encoded: EncodedFile[] = []
-      for (const file of files) {
-        if (file.size > MAX_FILE_SIZE) {
-          return NextResponse.json(
-            { ok: false, message: `Ukuran berkas "${file.name}" melebihi 10MB.` },
-            { status: 400 },
-          )
-        }
-        const buffer = Buffer.from(await file.arrayBuffer())
-        encoded.push({
-          name: file.name,
-          mimeType: file.type || "application/octet-stream",
-          base64: buffer.toString("base64"),
-        })
-      }
-      filesPayload[field] = encoded
     }
-
-    const data = parsed.data
 
     const scriptRes = await fetch(scriptUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        action: "submit",
         referenceId: data.referenceId,
         kategori: data.kategori,
         kategoriLabel: KATEGORI_LABEL[data.kategori] ?? data.kategori,
@@ -172,7 +145,7 @@ export async function POST(req: Request) {
         kota: data.kota,
         telepon: data.telepon,
         email: data.email,
-        files: filesPayload,
+        fileLinks: data.fileLinks,
       }),
       redirect: "follow",
     })
