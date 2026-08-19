@@ -226,6 +226,10 @@ function handleSubmit(data) {
 /** Buka URL Web App langsung di browser untuk memastikan script sudah aktif */
 function doGet() {
   return ContentService.createTextOutput(
-    JSON.stringify({ ok: true, message: "Apps Script pendaftaran aktif." }),
+    JSON.stringify({
+      ok: true,
+      message: "Apps Script pendaftaran aktif.",
+      version: "vercel-blob-final-1", // ganti string ini tiap kali update Code.gs, buat cek deployment aktif
+    }),
   ).setMimeType(ContentService.MimeType.JSON)
 }
