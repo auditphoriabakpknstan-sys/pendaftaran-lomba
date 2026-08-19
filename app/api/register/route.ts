@@ -163,11 +163,11 @@ export async function POST(req: Request) {
       )
     }
 
-    // Apps Script sudah menyalin semua berkas ke Drive — hapus salinan
-    // sementara di Vercel Blob (best-effort, tidak menggagalkan request
-    // utama kalau ada satu-dua yang gagal dihapus).
-    const allBlobUrls = Object.values(data.fileUrls).flat()
-    await Promise.allSettled(allBlobUrls.map((url) => del(url)))
+    // SEMENTARA DIMATIKAN UNTUK DEBUGGING — supaya file di Blob tidak langsung
+    // terhapus dan bisa dicek manual dulu di dashboard Vercel > Storage > Manage Blobs.
+    // Nanti aktifkan lagi kalau sudah confirmed beres.
+    // const allBlobUrls = Object.values(data.fileUrls).flat()
+    // await Promise.allSettled(allBlobUrls.map((url) => del(url)))
 
     return NextResponse.json({ ok: true, message: result.message ?? "Pendaftaran berhasil dikirim." })
   } catch (error) {
