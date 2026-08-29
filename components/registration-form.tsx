@@ -147,6 +147,20 @@ const CODE_TO_VALUE: Record<string, Exclude<KategoriValue, "">> = {
   lcca: "lcca",
 }
 
+/**
+ * Narahubung (contact person) khusus tiap cabang lomba — ditampilkan di
+ * footer form, otomatis berganti sesuai kategori yang sedang aktif.
+ * Nomor WA disimpan tanpa "+" dan tanpa spasi (format wa.me), nama tampilan
+ * boleh pakai format bebas.
+ */
+const KATEGORI_CONTACT: Record<Exclude<KategoriValue, "">, { nama: string; whatsapp: string }> = {
+  aec: { nama: "Tira", whatsapp: "6285254131680" },
+  arc: { nama: "Wahyu", whatsapp: "6285928106351" },
+  aice: { nama: "Nasywa", whatsapp: "6282350128556" },
+  avoc: { nama: "Thania", whatsapp: "6289671315301" },
+  lcca: { nama: "Nazhila", whatsapp: "6289668665861" },
+}
+
 type FormState = {
   namaTim: string
   ketua: string
@@ -768,6 +782,8 @@ function RegistrationFormInner() {
     return <PendaftaranDitutup kategoriConfig={kategoriConfig} />
   }
 
+  const contact = KATEGORI_CONTACT[kategoriConfig.value]
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 md:py-16">
       {draftRestored && step === 0 && (
@@ -1236,16 +1252,16 @@ function RegistrationFormInner() {
       </div>
 
       <p className="mt-6 text-center text-xs text-muted-foreground">
-        Butuh bantuan? Hubungi panitia Auditphoria 6.0 melalui narahubung resmi.
+        Butuh bantuan? Hubungi narahubung {kategoriConfig.code} melalui kontak resmi berikut.
       </p>
       <a
-        href="https://wa.me/6285137734757"
+        href={`https://wa.me/${contact.whatsapp}`}
         target="_blank"
         rel="noopener noreferrer"
         className="mt-2 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary hover:underline"
       >
         <MessageCircle className="size-4" aria-hidden="true" />
-        +62 8513 7734 757 (Stefan)
+        {contact.nama} — +{contact.whatsapp.replace(/^62/, "62 ")}
       </a>
     </div>
   )
@@ -1591,6 +1607,7 @@ function SuccessScreen({
   referenceId: string
 }) {
   const isTim = kategoriConfig.timMode !== "solo"
+  const contact = KATEGORI_CONTACT[kategoriConfig.value]
 
   function handleDownload() {
     downloadReceiptFile({
@@ -1672,6 +1689,15 @@ function SuccessScreen({
             Simpan file bukti ini — jangan hanya mengandalkan tampilan di layar, karena akan hilang jika halaman
             di-refresh.
           </p>
+          <a
+            href={`https://wa.me/${contact.whatsapp}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+          >
+            <MessageCircle className="size-4" aria-hidden="true" />
+            Ada pertanyaan? Hubungi {contact.nama} ({kategoriConfig.code})
+          </a>
         </div>
       </div>
     </div>
