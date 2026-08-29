@@ -1261,7 +1261,7 @@ function RegistrationFormInner() {
         className="mt-2 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary hover:underline"
       >
         <MessageCircle className="size-4" aria-hidden="true" />
-        {contact.nama} (+{contact.whatsapp.replace(/^62/, "62 "))}
+        {contact.nama} +{contact.whatsapp.replace(/^62/, "62 "))}
       </a>
     </div>
   )
