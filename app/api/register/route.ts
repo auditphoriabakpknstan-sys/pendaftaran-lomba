@@ -6,15 +6,34 @@ export const runtime = "nodejs"
 export const maxDuration = 60
 
 const KATEGORI_LABEL: Record<string, string> = {
-  essay: "Essay Auditphoria",
-  policy: "Audit Policy",
-  order: "Audit Order",
-  infografis: "Audit Infografis",
+  aec: "AEC - Audit Essay Competition",
+  arc: "ARC - Audit Reels Competition",
+  aice: "AICE - Audit Infografis Competition",
+  avoc: "AVOC - Audit Voice Over Competition",
+  lcca: "LCCA - Lomba Cerdas Cermat Audit",
 }
 
-const FILE_FIELDS = ["abstrak", "followIg", "ktm", "posterWa", "posterIg", "twibbon", "buktiBayar"] as const
-const FILE_LABELS: Record<(typeof FILE_FIELDS)[number], string> = {
-  abstrak: "Karya - Abstrak",
+const COMMON_FILE_FIELDS = ["followIg", "ktm", "posterWa", "posterIg", "twibbon", "buktiBayar"] as const
+
+const KATEGORI_FILE_REQUIREMENTS: Record<string, string[]> = {
+  aec: ["abstrak"],
+  arc: [],
+  aice: ["abstrak"],
+  avoc: ["karyaAudio"],
+  lcca: [],
+}
+
+const KATEGORI_BUTUH_LINK: Record<string, boolean> = {
+  aec: false,
+  arc: true,
+  aice: true,
+  avoc: false,
+  lcca: false,
+}
+
+const FILE_LABELS: Record<string, string> = {
+  abstrak: "Berkas Karya",
+  karyaAudio: "Berkas Audio Voice Over",
   followIg: "Bukti Follow IG",
   ktm: "KTM - Identitas",
   posterWa: "Bukti Share Poster WA",
@@ -23,16 +42,10 @@ const FILE_LABELS: Record<(typeof FILE_FIELDS)[number], string> = {
   buktiBayar: "Bukti Pembayaran",
 }
 
-// CATATAN ARSITEKTUR:
-// Berkas TIDAK lewat endpoint ini sama sekali. Browser mengunggahnya
-// LANGSUNG ke Vercel Blob (lihat app/api/blob-upload/route.ts), jadi tidak
-// pernah kena limit ukuran request 4.5MB milik Vercel Functions. Endpoint
-// ini hanya menerima data teks + URL blob hasil upload tadi (payload kecil),
-// meneruskannya ke Apps Script (server-ke-server, jadi tidak ada isu CORS),
-// lalu menghapus blob sementara setelah Apps Script konfirmasi berhasil
-// menyalinnya ke Google Drive.
+const IG_LINK_REGEX = /^https?:\/\/(www\.)?instagram\.com\/.+/i
+
 const dataSchema = z.object({
-  kategori: z.enum(["essay", "policy", "order", "infografis"], {
+  kategori: z.enum(["aec", "arc", "aice", "avoc", "lcca"], {
     errorMap: () => ({ message: "Kategori lomba tidak valid." }),
   }),
   namaTim: z.string().optional().default(""),
@@ -48,22 +61,15 @@ const dataSchema = z.object({
   email: z.string().email("Format email tidak valid."),
   pakta: z.literal("true", { errorMap: () => ({ message: "Pakta integritas wajib disetujui." }) }),
   referenceId: z.string().optional().default(""),
-  website: z.string().optional().default(""), // honeypot
+  website: z.string().optional().default(""),
   formLoadedAt: z.number().optional().default(0),
+  karyaLink: z.string().optional().default(""),
   fileUrls: z.record(z.array(z.string())).optional().default({}),
 })
 
-// Minimal waktu (ms) antara form dimuat dan disubmit. Manusia butuh setidaknya
-// beberapa detik untuk mengisi + upload banyak berkas; bot pengisi otomatis
-// biasanya submit dalam hitungan milidetik.
 const MIN_SUBMIT_TIME_MS = 4000
-
-// Rate limit sederhana per-IP (best-effort, in-memory). Karena serverless function
-// bisa "cold start" ulang atau berjalan di banyak instance paralel, ini BUKAN
-// proteksi definitif — cukup untuk menahan bot naif yang spam dari 1 sumber.
-// Untuk proteksi lebih andal di traffic tinggi, pertimbangkan Vercel KV / Upstash.
-const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000 // 10 menit
-const RATE_LIMIT_MAX = 8 // maksimal 8 submit per IP per 10 menit
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
+const RATE_LIMIT_MAX = 8
 const rateLimitStore = new Map<string, number[]>()
 
 function isRateLimited(ip: string) {
@@ -81,7 +87,6 @@ export async function POST(req: Request) {
       throw new Error("APPS_SCRIPT_URL belum diatur di environment variables.")
     }
 
-    // --- Rate limit per IP ---
     const ip =
       req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       req.headers.get("x-real-ip") ||
@@ -95,7 +100,6 @@ export async function POST(req: Request) {
 
     const body = await req.json()
 
-    // --- Anti-bot: honeypot ---
     const honeypot = String(body?.website ?? "")
     if (honeypot.trim() !== "") {
       return NextResponse.json({ ok: false, message: "Pendaftaran gagal dikirim. Coba lagi." }, { status: 400 })
@@ -109,7 +113,6 @@ export async function POST(req: Request) {
 
     const data = parsed.data
 
-    // --- Anti-bot: waktu pengisian ---
     if (data.formLoadedAt > 0 && Date.now() - data.formLoadedAt < MIN_SUBMIT_TIME_MS) {
       return NextResponse.json(
         { ok: false, message: "Pengisian terlalu cepat, silakan coba lagi." },
@@ -117,12 +120,34 @@ export async function POST(req: Request) {
       )
     }
 
-    // --- Pastikan semua berkas wajib sudah diunggah ke Blob (URL-nya sudah ada) ---
-    for (const field of FILE_FIELDS) {
+    if (data.kategori === "lcca" && !data.namaTim.trim()) {
+      return NextResponse.json(
+        { ok: false, message: "LCCA wajib beregu — Nama Tim harus diisi." },
+        { status: 400 },
+      )
+    }
+
+    if (KATEGORI_BUTUH_LINK[data.kategori]) {
+      if (!data.karyaLink.trim()) {
+        return NextResponse.json(
+          { ok: false, message: "Link Instagram wajib diisi untuk kategori ini." },
+          { status: 400 },
+        )
+      }
+      if (!IG_LINK_REGEX.test(data.karyaLink.trim())) {
+        return NextResponse.json(
+          { ok: false, message: "Link harus berupa URL Instagram (instagram.com/...)." },
+          { status: 400 },
+        )
+      }
+    }
+
+    const requiredFileFields = [...COMMON_FILE_FIELDS, ...(KATEGORI_FILE_REQUIREMENTS[data.kategori] ?? [])]
+    for (const field of requiredFileFields) {
       const urls = data.fileUrls[field]
       if (!urls || urls.length === 0) {
         return NextResponse.json(
-          { ok: false, message: `Berkas "${FILE_LABELS[field]}" wajib diunggah.` },
+          { ok: false, message: `Berkas "${FILE_LABELS[field] ?? field}" wajib diunggah.` },
           { status: 400 },
         )
       }
@@ -143,6 +168,7 @@ export async function POST(req: Request) {
         kota: data.kota,
         telepon: data.telepon,
         email: data.email,
+        karyaLink: data.karyaLink,
         fileUrls: data.fileUrls,
       }),
       redirect: "follow",
@@ -163,11 +189,8 @@ export async function POST(req: Request) {
       )
     }
 
-    // SEMENTARA DIMATIKAN UNTUK DEBUGGING — supaya file di Blob tidak langsung
-    // terhapus dan bisa dicek manual dulu di dashboard Vercel > Storage > Manage Blobs.
-    // Nanti aktifkan lagi kalau sudah confirmed beres.
-    // const allBlobUrls = Object.values(data.fileUrls).flat()
-    // await Promise.allSettled(allBlobUrls.map((url) => del(url)))
+    const allBlobUrls = Object.values(data.fileUrls).flat()
+    await Promise.allSettled(allBlobUrls.map((url) => del(url)))
 
     return NextResponse.json({ ok: true, message: result.message ?? "Pendaftaran berhasil dikirim." })
   } catch (error) {
