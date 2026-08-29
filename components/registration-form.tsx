@@ -2,7 +2,8 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import Image from "next/image"
 import {
   FileText,
@@ -15,8 +16,9 @@ import {
   CheckCircle2,
   ShieldCheck,
   ScrollText,
-  ClipboardCheck,
-  Gavel,
+  Video,
+  Mic,
+  BrainCircuit,
   AtSign,
   IdCard,
   MessageCircle,
@@ -34,10 +36,116 @@ import {
   Plus,
   Clock,
   Download,
+  Loader2,
+  Link2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-type Kategori = "essay" | "policy" | "order" | "infografis" | ""
+/* =========================================================================
+ * KONFIGURASI CABANG LOMBA
+ * =========================================================================
+ * Ubah/tambah lomba dari SATU tempat ini. Setiap lomba (kategori) punya:
+ * - timMode: "solo" (perorangan saja) | "opsional" (boleh sendiri/tim) | "wajib" (harus tim)
+ * - karya: jenis berkas karya yang diminta khusus lomba itu:
+ *     { type: "file" }              -> upload 1 file (essay/abstrak dsb)
+ *     { type: "link" }              -> isi 1 link (URL video/postingan)
+ *     { type: "file+link" }         -> upload 1 file DAN isi 1 link
+ *     { type: "audio" }             -> upload 1 file audio (maks 100MB)
+ *     { type: "none" }              -> tidak ada berkas karya sama sekali
+ * ========================================================================= */
+
+type KategoriValue = "aec" | "arc" | "aice" | "avoc" | "lcca" | ""
+type TimMode = "solo" | "opsional" | "wajib"
+type KaryaType = "file" | "link" | "file+link" | "audio" | "none"
+
+type KategoriConfig = {
+  value: Exclude<KategoriValue, "">
+  code: string
+  label: string
+  desc: string
+  timMode: TimMode
+  icon: React.ReactNode
+  karya: KaryaType
+  karyaFileLabel?: string
+  karyaFileHint?: string
+  karyaFileAccept?: string
+  karyaLinkLabel?: string
+  karyaLinkPlaceholder?: string
+}
+
+const kategoriList: KategoriConfig[] = [
+  {
+    value: "aec",
+    code: "AEC",
+    label: "Audit Essay Competition",
+    desc: "Kompetisi menulis esai bertema audit — individu atau tim",
+    timMode: "opsional",
+    icon: <ScrollText className="size-5" aria-hidden="true" />,
+    karya: "file",
+    karyaFileLabel: "File Abstrak Essay",
+    karyaFileHint: "Tahap pengumpulan abstrak — PDF / DOC / DOCX · maks 10MB",
+    karyaFileAccept: ".pdf,.doc,.docx",
+  },
+  {
+    value: "arc",
+    code: "ARC",
+    label: "Audit Reels Competition",
+    desc: "Kompetisi reels Instagram bertema audit — perorangan",
+    timMode: "solo",
+    icon: <Video className="size-5" aria-hidden="true" />,
+    karya: "link",
+    karyaLinkLabel: "Link Video Reels Instagram",
+    karyaLinkPlaceholder: "https://www.instagram.com/reel/...",
+  },
+  {
+    value: "aice",
+    code: "AICE",
+    label: "Audit Infografis Competition",
+    desc: "Kompetisi desain infografis bertema audit — perorangan",
+    timMode: "solo",
+    icon: <Palette className="size-5" aria-hidden="true" />,
+    karya: "file+link",
+    karyaFileLabel: "File Infografis (PDF)",
+    karyaFileHint: "Unggah karya infografis — PDF · maks 10MB",
+    karyaFileAccept: ".pdf",
+    karyaLinkLabel: "Link Postingan Infografis di Instagram",
+    karyaLinkPlaceholder: "https://www.instagram.com/p/...",
+  },
+  {
+    value: "avoc",
+    code: "AVOC",
+    label: "Audit Voice Over Competition",
+    desc: "Kompetisi voice over bertema audit — perorangan",
+    timMode: "solo",
+    icon: <Mic className="size-5" aria-hidden="true" />,
+    karya: "audio",
+    karyaFileLabel: "File Audio Voice Over",
+    karyaFileHint: "Format MP3 / WAV / M4A · maks 100MB",
+    karyaFileAccept: "audio/*,.mp3,.wav,.m4a,.aac,.ogg",
+  },
+  {
+    value: "lcca",
+    code: "LCCA",
+    label: "Lomba Cerdas Cermat Audit",
+    desc: "Cerdas cermat bertema audit — wajib tim",
+    timMode: "wajib",
+    icon: <BrainCircuit className="size-5" aria-hidden="true" />,
+    karya: "none",
+  },
+]
+
+function getKategoriConfig(value: KategoriValue): KategoriConfig | null {
+  return kategoriList.find((k) => k.value === value) ?? null
+}
+
+/** Peta kode pendek (dipakai di URL deep-link dari Google Sites) -> value internal. */
+const CODE_TO_VALUE: Record<string, Exclude<KategoriValue, "">> = {
+  aec: "aec",
+  arc: "arc",
+  aice: "aice",
+  avoc: "avoc",
+  lcca: "lcca",
+}
 
 type FormState = {
   namaTim: string
@@ -49,17 +157,28 @@ type FormState = {
   telepon: string
   email: string
   pakta: boolean
-  kategori: Kategori
+  kategori: KategoriValue
+  karyaLink: string
+}
+
+/** Satu slot berkas: bisa lagi diunggah, sudah selesai (ada url), atau gagal (ada error). */
+type FileSlot = {
+  id: string
+  name: string
+  size: number
+  url?: string
+  uploading: boolean
+  error?: string
 }
 
 type FileState = {
-  abstrak: File | null
-  followIg: File[]
-  ktm: File[]
-  posterWa: File[]
-  posterIg: File[]
-  twibbon: File[]
-  buktiBayar: File[]
+  karyaFile: FileSlot | null
+  followIg: FileSlot[]
+  ktm: FileSlot[]
+  posterWa: FileSlot[]
+  posterIg: FileSlot[]
+  twibbon: FileSlot[]
+  buktiBayar: FileSlot[]
 }
 
 const initialForm: FormState = {
@@ -73,10 +192,11 @@ const initialForm: FormState = {
   email: "",
   pakta: false,
   kategori: "",
+  karyaLink: "",
 }
 
 const initialFiles: FileState = {
-  abstrak: null,
+  karyaFile: null,
   followIg: [],
   ktm: [],
   posterWa: [],
@@ -87,82 +207,23 @@ const initialFiles: FileState = {
 
 const MAX_BUKTI = 10
 const MAX_BAYAR = 5
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB — berlaku untuk SEMUA jenis berkas
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB — default untuk berkas non-audio
+const MAX_AUDIO_SIZE = 100 * 1024 * 1024 // 100MB — khusus AVOC
 
 // Batas waktu pendaftaran per kategori. Ubah sesuai jadwal lomba yang sebenarnya.
 // Format: "YYYY-MM-DDTHH:mm:ss" (waktu lokal WIB)
-const kategoriDeadline: Record<Exclude<Kategori, "">, string> = {
-  essay: "2026-09-15T23:59:59",
-  policy: "2026-09-15T23:59:59",
-  order: "2026-09-15T23:59:59",
-  infografis: "2026-09-20T23:59:59",
+const kategoriDeadline: Record<Exclude<KategoriValue, "">, string> = {
+  aec: "2026-09-15T23:59:59",
+  arc: "2026-09-15T23:59:59",
+  aice: "2026-09-15T23:59:59",
+  avoc: "2026-09-15T23:59:59",
+  lcca: "2026-09-20T23:59:59",
 }
 
 const PHONE_REGEX = /^[0-9+\s-]{8,}$/
+const URL_REGEX = /^https?:\/\/.+\..+/i
 
-const kategoriList: {
-  value: Exclude<Kategori, "">
-  label: string
-  desc: string
-  perorangan: boolean
-  icon: React.ReactNode
-}[] = [
-  {
-    value: "essay",
-    label: "Essay Auditphoria",
-    desc: "Kompetisi penulisan esai bertema audit — beregu",
-    perorangan: false,
-    icon: <ScrollText className="size-5" aria-hidden="true" />,
-  },
-  {
-    value: "policy",
-    label: "Audit Policy",
-    desc: "Analisis dan rekomendasi kebijakan audit — beregu",
-    perorangan: false,
-    icon: <ClipboardCheck className="size-5" aria-hidden="true" />,
-  },
-  {
-    value: "order",
-    label: "Audit Order",
-    desc: "Studi kasus prosedur dan tata kelola audit — beregu",
-    perorangan: false,
-    icon: <Gavel className="size-5" aria-hidden="true" />,
-  },
-  {
-    value: "infografis",
-    label: "Audit Infografis",
-    desc: "Kompetisi desain infografis bertema audit — perorangan",
-    perorangan: true,
-    icon: <Palette className="size-5" aria-hidden="true" />,
-  },
-]
-
-const kategoriKaryaLabel: Record<Exclude<Kategori, "">, string> = {
-  essay: "File Abstrak Essay",
-  policy: "File Abstrak Audit Policy",
-  order: "File Abstrak Audit Order",
-  infografis: "File Karya Infografis",
-}
-
-const kategoriKaryaHint: Record<Exclude<Kategori, "">, string> = {
-  essay: "Tahap pengumpulan abstrak — PDF / DOC / DOCX · maks 10MB",
-  policy: "Tahap pengumpulan abstrak — PDF / DOC / DOCX · maks 10MB",
-  order: "Tahap pengumpulan abstrak — PDF / DOC / DOCX · maks 10MB",
-  infografis: "Unggah karya infografis — JPG / PNG / PDF · maks 10MB",
-}
-
-const kategoriKaryaAccept: Record<Exclude<Kategori, "">, string> = {
-  essay: ".pdf,.doc,.docx",
-  policy: ".pdf,.doc,.docx",
-  order: ".pdf,.doc,.docx",
-  infografis: "image/png,image/jpeg,.pdf",
-}
-
-function isPerorangan(kategori: Kategori) {
-  return kategoriList.find((k) => k.value === kategori)?.perorangan ?? false
-}
-
-const steps = ["Kategori", "Data Peserta", "Berkas", "Pembayaran"]
+const steps = ["Data Peserta", "Berkas", "Pembayaran"]
 
 const BANK = {
   bank: "Bank BNI",
@@ -171,27 +232,103 @@ const BANK = {
 }
 
 const RECEIPT_STORAGE_KEY = "auditphoria-last-registration"
+const DRAFT_STORAGE_KEY = "auditphoria-form-draft"
+const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000 // draft basi setelah 24 jam
 
 // Nama field yang dipakai untuk path blob di Vercel Blob (bukan URL Apps
-// Script — file sekarang diunggah ke Vercel Blob dulu, baru dipindah ke
-// Drive lewat Apps Script secara server-ke-server, supaya tidak kena limit
-// ukuran request 4.5MB milik Vercel Functions maupun isu CORS Apps Script).
+// Script — file diunggah ke Vercel Blob dulu begitu dipilih, baru dipindah
+// ke Drive lewat Apps Script secara server-ke-server saat submit, supaya
+// tidak kena limit ukuran request 4.5MB milik Vercel Functions maupun isu
+// CORS Apps Script).
 async function uploadFileToBlob(field: string, file: File, referenceId: string): Promise<string> {
   const { upload } = await import("@vercel/blob/client")
-  const blob = await upload(`pendaftaran/${referenceId}/${field}-${file.name}`, file, {
+  const blob = await upload(`pendaftaran/${referenceId}/${field}-${Date.now()}-${file.name}`, file, {
     access: "public",
     handleUploadUrl: "/api/blob-upload",
+    clientPayload: JSON.stringify({ field }),
   })
   return blob.url
 }
 
-function generateReferenceId() {
+function generateReferenceId(prefix: string) {
   const rand = Math.random().toString(36).slice(2, 8).toUpperCase()
   const date = new Date()
   const y = date.getFullYear().toString().slice(-2)
   const m = String(date.getMonth() + 1).padStart(2, "0")
   const d = String(date.getDate()).padStart(2, "0")
-  return `AUD6-${y}${m}${d}-${rand}`
+  return `${prefix}-${y}${m}${d}-${rand}`
+}
+
+function makeFileSlot(file: File): FileSlot {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: file.name,
+    size: file.size,
+    uploading: true,
+  }
+}
+
+/** Cuma slot yang benar-benar selesai diunggah (ada url) yang aman disimpan ke draft. */
+function sanitizeFilesForDraft(files: FileState): FileState {
+  const clean = (list: FileSlot[]) => list.filter((f) => !f.uploading && !!f.url)
+  return {
+    karyaFile: files.karyaFile && !files.karyaFile.uploading && files.karyaFile.url ? files.karyaFile : null,
+    followIg: clean(files.followIg),
+    ktm: clean(files.ktm),
+    posterWa: clean(files.posterWa),
+    posterIg: clean(files.posterIg),
+    twibbon: clean(files.twibbon),
+    buktiBayar: clean(files.buktiBayar),
+  }
+}
+
+function hasPendingUploads(files: FileState) {
+  if (files.karyaFile?.uploading) return true
+  return [files.followIg, files.ktm, files.posterWa, files.posterIg, files.twibbon, files.buktiBayar].some((list) =>
+    list.some((f) => f.uploading),
+  )
+}
+
+type Draft = {
+  referenceId: string
+  form: FormState
+  files: FileState
+  savedAt: number
+}
+
+function draftKey(kategori: KategoriValue) {
+  return `${DRAFT_STORAGE_KEY}-${kategori || "umum"}`
+}
+
+function loadDraft(kategori: KategoriValue): Draft | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem(draftKey(kategori))
+    if (!raw) return null
+    const draft = JSON.parse(raw) as Draft
+    if (!draft.savedAt || Date.now() - draft.savedAt > DRAFT_MAX_AGE_MS) return null
+    return draft
+  } catch {
+    return null
+  }
+}
+
+function saveDraft(kategori: KategoriValue, draft: Draft) {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(draftKey(kategori), JSON.stringify(draft))
+  } catch {
+    // storage penuh / private browsing — abaikan, tidak fatal
+  }
+}
+
+function clearDraft(kategori: KategoriValue) {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.removeItem(draftKey(kategori))
+  } catch {
+    // abaikan
+  }
 }
 
 type ReceiptData = {
@@ -220,7 +357,7 @@ function saveReceiptToStorage(referenceId: string, form: FormState, kategoriLabe
     }
     window.localStorage.setItem(RECEIPT_STORAGE_KEY, JSON.stringify(receipt))
   } catch {
-    // localStorage tidak tersedia (mis. private browsing) — abaikan, tidak fatal
+    // abaikan
   }
 }
 
@@ -241,7 +378,7 @@ function downloadReceiptFile(receipt: ReceiptData) {
     "==============================================",
     "",
     `Nomor Referensi : ${receipt.referenceId}`,
-    `Kategori Lomba   : ${receipt.kategoriLabel}`,
+    `Cabang Lomba     : ${receipt.kategoriLabel}`,
     `Nama Tim/Peserta : ${receipt.namaTim || "-"}`,
     `Nama Ketua       : ${receipt.ketua}`,
     `Asal Institusi   : ${receipt.sekolah}`,
@@ -265,55 +402,172 @@ function downloadReceiptFile(receipt: ReceiptData) {
   URL.revokeObjectURL(url)
 }
 
+/**
+ * Wrapper luar: baca parameter URL (?kategori=aec dst) di dalam Suspense,
+ * seperti disyaratkan Next.js untuk useSearchParams pada Client Component.
+ */
 export function RegistrationForm() {
+  return (
+    <Suspense fallback={<FormSkeleton />}>
+      <RegistrationFormInner />
+    </Suspense>
+  )
+}
+
+function FormSkeleton() {
+  return (
+    <div className="mx-auto max-w-2xl px-4 py-10 md:py-16">
+      <div className="h-64 animate-pulse rounded-3xl border border-border bg-card" />
+    </div>
+  )
+}
+
+function RegistrationFormInner() {
+  const searchParams = useSearchParams()
+
+  // Kategori diambil dari URL (?kategori=aec) — dikunci, TIDAK bisa diganti manual dari
+  // dalam form. Kalau parameter tidak ada / tidak valid, tampilkan halaman pilih lomba
+  // manual sebagai fallback supaya link lama / akses langsung tetap bisa dipakai.
+  const kategoriFromUrl = (searchParams.get("kategori") || "").toLowerCase()
+  const lockedKategori: KategoriValue = CODE_TO_VALUE[kategoriFromUrl] ?? ""
+  const [manualKategori, setManualKategori] = useState<KategoriValue>("")
+  const activeKategori: KategoriValue = lockedKategori || manualKategori
+  const kategoriConfig = getKategoriConfig(activeKategori)
+
   const [step, setStep] = useState(0)
-  const [form, setForm] = useState<FormState>(initialForm)
+  const [form, setForm] = useState<FormState>({ ...initialForm, kategori: activeKategori })
   const [files, setFiles] = useState<FileState>(initialFiles)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [submitPhase, setSubmitPhase] = useState<"" | "uploading" | "saving">("")
-  const [uploadProgress, setUploadProgress] = useState("")
   const [submitError, setSubmitError] = useState("")
   const [copied, setCopied] = useState(false)
-  const [referenceId, setReferenceId] = useState("")
-  const [honeypot, setHoneypot] = useState("") // field jebakan bot, harus selalu kosong
+  const [referenceId, setReferenceId] = useState<string>(() => generateReferenceId(kategoriConfig?.code || "AUD6"))
+  const [honeypot, setHoneypot] = useState("")
   const [lastReceipt, setLastReceipt] = useState<ReceiptData | null>(null)
+  const [draftRestored, setDraftRestored] = useState(false)
   const formLoadedAt = useRef(Date.now())
-  const submittingRef = useRef(false) // guard tambahan supaya klik ganda tidak lolos meski state React belum sempat update
+  const submittingRef = useRef(false)
 
+  // Pulihkan draft (kalau ada & belum basi) + cek bukti pendaftaran terakhir — HANYA di
+  // client, supaya tidak bentrok dengan hasil render server (hydration).
   useEffect(() => {
+    if (!activeKategori) return
+    const draft = loadDraft(activeKategori)
+    if (draft) {
+      setReferenceId(draft.referenceId)
+      setForm({ ...draft.form, kategori: activeKategori })
+      setFiles(draft.files)
+      setDraftRestored(true)
+    } else {
+      setForm((prev) => ({ ...prev, kategori: activeKategori }))
+    }
     setLastReceipt(loadReceiptFromStorage())
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKategori])
 
-  const perorangan = isPerorangan(form.kategori)
+  // Simpan draft setiap kali data berubah
+  useEffect(() => {
+    if (!activeKategori) return
+    const isEmpty =
+      !form.ketua.trim() &&
+      !files.karyaFile &&
+      files.followIg.length === 0 &&
+      files.ktm.length === 0 &&
+      files.posterWa.length === 0 &&
+      files.posterIg.length === 0 &&
+      files.twibbon.length === 0 &&
+      files.buktiBayar.length === 0 &&
+      !form.karyaLink.trim()
+    if (isEmpty) return
+
+    saveDraft(activeKategori, {
+      referenceId,
+      form,
+      files: sanitizeFilesForDraft(files),
+      savedAt: Date.now(),
+    })
+  }, [form, files, referenceId, activeKategori])
+
+  const timMode = kategoriConfig?.timMode ?? "solo"
+  const isTim = timMode !== "solo"
+  const timWajib = timMode === "wajib"
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
     setErrors((prev) => ({ ...prev, [key]: "" }))
   }
 
-  function setKarya(file: File | null) {
-    if (file && file.size > MAX_FILE_SIZE) {
-      setErrors((prev) => ({ ...prev, abstrak: `Ukuran file maksimal 10MB (file Anda ${(file.size / 1024 / 1024).toFixed(1)}MB)` }))
-      return
-    }
-    setFiles((prev) => ({ ...prev, abstrak: file }))
-    setErrors((prev) => ({ ...prev, abstrak: "" }))
-  }
-
-  function setMulti(key: keyof Omit<FileState, "abstrak">, list: File[]) {
-    const oversized = list.find((f) => f.size > MAX_FILE_SIZE)
-    if (oversized) {
+  function selectKaryaFile(file: File | null) {
+    if (!file || !kategoriConfig) return
+    const isAudio = kategoriConfig.karya === "audio"
+    const maxSize = isAudio ? MAX_AUDIO_SIZE : MAX_FILE_SIZE
+    if (file.size > maxSize) {
       setErrors((prev) => ({
         ...prev,
-        [key]: `Berkas "${oversized.name}" melebihi 10MB, dihapus dari pilihan`,
+        karyaFile: `Ukuran file maksimal ${isAudio ? "100MB" : "10MB"} (file Anda ${(file.size / 1024 / 1024).toFixed(1)}MB)`,
       }))
-      setFiles((prev) => ({ ...prev, [key]: list.filter((f) => f.size <= MAX_FILE_SIZE) }))
       return
     }
-    setFiles((prev) => ({ ...prev, [key]: list }))
+    setErrors((prev) => ({ ...prev, karyaFile: "" }))
+    const slot = makeFileSlot(file)
+    setFiles((prev) => ({ ...prev, karyaFile: slot }))
+
+    uploadFileToBlob(isAudio ? "karyaAudio" : "karyaFile", file, referenceId)
+      .then((url) => {
+        setFiles((prev) => (prev.karyaFile?.id === slot.id ? { ...prev, karyaFile: { ...slot, uploading: false, url } } : prev))
+      })
+      .catch((err: unknown) => {
+        setFiles((prev) => (prev.karyaFile?.id === slot.id ? { ...prev, karyaFile: null } : prev))
+        setErrors((prev) => ({
+          ...prev,
+          karyaFile: err instanceof Error ? `Gagal unggah: ${err.message}` : "Gagal mengunggah berkas, coba lagi.",
+        }))
+      })
+  }
+
+  function removeKaryaFile() {
+    setFiles((prev) => ({ ...prev, karyaFile: null }))
+  }
+
+  function selectMulti(key: keyof Omit<FileState, "karyaFile">, incoming: File[], maxFiles: number) {
     setErrors((prev) => ({ ...prev, [key]: "" }))
+
+    const currentCount = files[key].length
+    const room = Math.max(maxFiles - currentCount, 0)
+    const candidates = incoming.slice(0, room)
+
+    const oversized = candidates.find((f) => f.size > MAX_FILE_SIZE)
+    const valid = candidates.filter((f) => f.size <= MAX_FILE_SIZE)
+    if (oversized) {
+      setErrors((prev) => ({ ...prev, [key]: `Berkas "${oversized.name}" melebihi 10MB, dilewati` }))
+    }
+    if (valid.length === 0) return
+
+    const slots = valid.map(makeFileSlot)
+    setFiles((prev) => ({ ...prev, [key]: [...prev[key], ...slots] }))
+
+    slots.forEach((slot, i) => {
+      const file = valid[i]
+      uploadFileToBlob(key, file, referenceId)
+        .then((url) => {
+          setFiles((prev) => ({
+            ...prev,
+            [key]: prev[key].map((s) => (s.id === slot.id ? { ...s, uploading: false, url } : s)),
+          }))
+        })
+        .catch((err: unknown) => {
+          setFiles((prev) => ({ ...prev, [key]: prev[key].filter((s) => s.id !== slot.id) }))
+          setErrors((prev) => ({
+            ...prev,
+            [key]: err instanceof Error ? `Gagal unggah "${file.name}": ${err.message}` : `Gagal mengunggah "${file.name}", coba lagi.`,
+          }))
+        })
+    })
+  }
+
+  function removeMulti(key: keyof Omit<FileState, "karyaFile">, index: number) {
+    setFiles((prev) => ({ ...prev, [key]: prev[key].filter((_, i) => i !== index) }))
   }
 
   function goTo(next: number) {
@@ -329,8 +583,8 @@ export function RegistrationForm() {
 
   function validateData() {
     const next: Record<string, string> = {}
-    if (!perorangan && !form.namaTim.trim()) next.namaTim = "Nama tim wajib diisi"
-    if (!form.ketua.trim()) next.ketua = perorangan ? "Nama peserta wajib diisi" : "Nama ketua tim wajib diisi"
+    if (timWajib && !form.namaTim.trim()) next.namaTim = "Nama tim wajib diisi"
+    if (!form.ketua.trim()) next.ketua = isTim ? "Nama ketua tim wajib diisi" : "Nama peserta wajib diisi"
     if (!form.sekolah.trim()) next.sekolah = "Asal sekolah/universitas wajib diisi"
     if (!form.kota.trim()) next.kota = "Kota asal wajib diisi"
     if (!form.telepon.trim()) next.telepon = "Nomor telepon wajib diisi"
@@ -345,7 +599,16 @@ export function RegistrationForm() {
 
   function validateFiles() {
     const next: Record<string, string> = {}
-    if (!files.abstrak) next.abstrak = "Berkas karya wajib diunggah"
+    if (!kategoriConfig) return false
+
+    if (kategoriConfig.karya === "file" || kategoriConfig.karya === "audio" || kategoriConfig.karya === "file+link") {
+      if (!files.karyaFile) next.karyaFile = "Berkas karya wajib diunggah"
+    }
+    if (kategoriConfig.karya === "link" || kategoriConfig.karya === "file+link") {
+      if (!form.karyaLink.trim()) next.karyaLink = "Link karya wajib diisi"
+      else if (!URL_REGEX.test(form.karyaLink.trim())) next.karyaLink = "Format link tidak valid (harus diawali https://)"
+    }
+
     if (files.followIg.length === 0) next.followIg = "Bukti follow Instagram wajib diunggah"
     if (files.ktm.length === 0) next.ktm = "Scan KTM/identitas mahasiswa wajib diunggah"
     if (files.posterWa.length === 0) next.posterWa = "Bukti share poster di grup WA wajib diunggah"
@@ -356,55 +619,50 @@ export function RegistrationForm() {
     return Object.keys(next).length === 0
   }
 
-  function pickKategori(value: Exclude<Kategori, "">) {
-    update("kategori", value)
-    // memilih kategori langsung mengarahkan ke slide berikutnya
-    setTimeout(() => goTo(1), 180)
+  function pickKategoriManual(value: Exclude<KategoriValue, "">) {
+    setManualKategori(value)
   }
 
   function handleNextData() {
-    if (validateData()) goTo(2)
+    if (validateData()) goTo(1)
   }
 
   function handleNextFiles() {
-    if (validateFiles()) goTo(3)
+    if (validateFiles()) goTo(2)
   }
 
   async function handleSubmit() {
+    if (!kategoriConfig) return
     if (files.buktiBayar.length === 0) {
       setErrors({ buktiBayar: "Bukti pembayaran wajib diunggah" })
       scrollToError()
       return
     }
 
-    // Guard ganda: cek ref (sinkron, langsung akurat) sebelum cek state (bisa telat update)
+    if (hasPendingUploads(files)) {
+      setSubmitError("Masih ada berkas yang sedang diunggah. Tunggu sebentar sampai semua selesai, lalu coba lagi.")
+      return
+    }
+
     if (submittingRef.current || submitting) return
     submittingRef.current = true
 
     setSubmitting(true)
     setSubmitError("")
 
-    const newReferenceId = generateReferenceId()
-    const kategoriLabel = kategoriList.find((k) => k.value === form.kategori)?.label ?? form.kategori
-
     try {
-      // --- Tahap 1: upload semua berkas LANGSUNG ke Vercel Blob (bukan lewat Vercel Function) ---
-      // Ini yang bikin ukuran berkas tidak kena limit 4.5MB milik Vercel Functions —
-      // bytes berkas tidak pernah lewat /api/register sama sekali.
-      setSubmitPhase("uploading")
-
-      const filesToUpload: Record<string, File[]> = {
-        followIg: files.followIg,
-        ktm: files.ktm,
-        posterWa: files.posterWa,
-        posterIg: files.posterIg,
-        twibbon: files.twibbon,
-        buktiBayar: files.buktiBayar,
+      const fileUrls: Record<string, string[]> = {
+        followIg: files.followIg.map((f) => f.url).filter((u): u is string => !!u),
+        ktm: files.ktm.map((f) => f.url).filter((u): u is string => !!u),
+        posterWa: files.posterWa.map((f) => f.url).filter((u): u is string => !!u),
+        posterIg: files.posterIg.map((f) => f.url).filter((u): u is string => !!u),
+        twibbon: files.twibbon.map((f) => f.url).filter((u): u is string => !!u),
+        buktiBayar: files.buktiBayar.map((f) => f.url).filter((u): u is string => !!u),
       }
-      if (files.abstrak) filesToUpload.abstrak = [files.abstrak]
+      if (files.karyaFile?.url) fileUrls.karyaFile = [files.karyaFile.url]
 
       const fieldLabel: Record<string, string> = {
-        abstrak: form.kategori ? kategoriKaryaLabel[form.kategori] : "Karya",
+        karyaFile: kategoriConfig.karyaFileLabel ?? "Karya",
         followIg: "Bukti Follow IG",
         ktm: "KTM/Identitas",
         posterWa: "Bukti Share Poster WA",
@@ -412,52 +670,20 @@ export function RegistrationForm() {
         twibbon: "Bukti Upload Twibbon",
         buktiBayar: "Bukti Pembayaran",
       }
-
-      let uploadedFiles = 0
-      const totalFiles = Object.values(filesToUpload).reduce((sum, list) => sum + list.length, 0)
-
-      let fileUrls: Record<string, string[]>
-      try {
-        const uploadEntries = await Promise.all(
-          Object.entries(filesToUpload).map(async ([field, list]) => {
-            const urls = await Promise.all(
-              list.map(async (file) => {
-                const url = await uploadFileToBlob(field, file, newReferenceId)
-                uploadedFiles += 1
-                setUploadProgress(`${uploadedFiles}/${totalFiles}`)
-                return url
-              }),
-            )
-            return [field, urls] as const
-          }),
-        )
-        fileUrls = Object.fromEntries(uploadEntries)
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error("[register] upload ke Vercel Blob gagal:", err)
-        throw new Error(
-          err instanceof Error && err.message
-            ? `Gagal mengunggah berkas: ${err.message}`
-            : "Gagal mengunggah berkas. Berkas yang sudah Anda pilih tidak hilang — coba tekan Kirim Pendaftaran sekali lagi.",
-        )
+      const requiredFields = ["followIg", "ktm", "posterWa", "posterIg", "twibbon", "buktiBayar"]
+      if (kategoriConfig.karya === "file" || kategoriConfig.karya === "audio" || kategoriConfig.karya === "file+link") {
+        requiredFields.push("karyaFile")
       }
-
-      // Jaga-jaga: pastikan setiap field wajib benar-benar dapat URL balik.
-      const missingFields = Object.keys(filesToUpload).filter((field) => !fileUrls[field]?.length)
+      const missingFields = requiredFields.filter((f) => !fileUrls[f]?.length)
       if (missingFields.length > 0) {
-        throw new Error(
-          `Berkas "${missingFields.map((f) => fieldLabel[f] ?? f).join(", ")}" gagal terunggah. Coba tekan "Kirim Pendaftaran" sekali lagi.`,
-        )
+        throw new Error(`Berkas "${missingFields.map((f) => fieldLabel[f] ?? f).join(", ")}" belum terunggah.`)
       }
-
-      // --- Tahap 2: kirim data teks + URL blob (kecil) ke /api/register ---
-      setSubmitPhase("saving")
 
       const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          kategori: form.kategori,
+          kategori: kategoriConfig.value,
           namaTim: form.namaTim,
           ketua: form.ketua,
           anggota1: form.anggota1,
@@ -467,8 +693,8 @@ export function RegistrationForm() {
           telepon: form.telepon,
           email: form.email,
           pakta: String(form.pakta),
-          referenceId: newReferenceId,
-          // Anti-spam: field jebakan (harus kosong) + jarak waktu sejak form dimuat
+          karyaLink: form.karyaLink,
+          referenceId,
           website: honeypot,
           formLoadedAt: formLoadedAt.current,
           fileUrls,
@@ -483,8 +709,8 @@ export function RegistrationForm() {
         return
       }
 
-      setReferenceId(newReferenceId)
-      saveReceiptToStorage(newReferenceId, form, kategoriLabel)
+      saveReceiptToStorage(referenceId, form, kategoriConfig.label)
+      clearDraft(activeKategori)
       setSubmitted(true)
       window.scrollTo({ top: 0, behavior: "smooth" })
     } catch (err) {
@@ -496,17 +722,17 @@ export function RegistrationForm() {
       submittingRef.current = false
     } finally {
       setSubmitting(false)
-      setSubmitPhase("")
-      setUploadProgress("")
     }
   }
 
   function reset() {
-    setForm(initialForm)
+    clearDraft(activeKategori)
+    setForm({ ...initialForm, kategori: activeKategori })
     setFiles(initialFiles)
     setErrors({})
     setStep(0)
     setSubmitted(false)
+    setReferenceId(generateReferenceId(kategoriConfig?.code || "AUD6"))
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
@@ -516,18 +742,50 @@ export function RegistrationForm() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      // abaikan jika clipboard tidak tersedia
+      // abaikan
     }
   }
 
-  if (submitted) {
-    return <SuccessScreen form={form} perorangan={perorangan} onReset={reset} referenceId={referenceId} />
+  // --- Tidak ada kategori terkunci dari URL & belum pilih manual -> tampilkan pemilih lomba ---
+  if (!activeKategori || !kategoriConfig) {
+    return <KategoriPicker onPick={pickKategoriManual} />
   }
 
-  const kategoriLabel = kategoriList.find((k) => k.value === form.kategori)?.label ?? "-"
+  if (submitted) {
+    return (
+      <SuccessScreen
+        form={form}
+        kategoriConfig={kategoriConfig}
+        onReset={reset}
+        referenceId={referenceId}
+      />
+    )
+  }
+
+  const { text: countdownText, expired } = useCountdownValue(kategoriDeadline[kategoriConfig.value])
+
+  if (expired) {
+    return <PendaftaranDitutup kategoriConfig={kategoriConfig} />
+  }
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 md:py-16">
+      {draftRestored && step === 0 && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+          <p className="text-sm text-foreground">
+            Progres pengisian sebelumnya untuk lomba ini berhasil dipulihkan, termasuk berkas yang sudah selesai
+            diunggah.
+          </p>
+          <button
+            type="button"
+            onClick={() => setDraftRestored(false)}
+            aria-label="Tutup"
+            className="inline-flex shrink-0 items-center justify-center rounded-lg px-2 py-1.5 text-muted-foreground hover:bg-secondary"
+          >
+            <X className="size-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      )}
       {step === 0 && lastReceipt && (
         <div className="mb-4 flex flex-col items-start gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-foreground">
@@ -561,19 +819,25 @@ export function RegistrationForm() {
           <div className="absolute -right-8 -top-8 size-40 rounded-full bg-primary-foreground/10" aria-hidden="true" />
           <div className="absolute -bottom-12 -left-6 size-40 rounded-full bg-accent/20" aria-hidden="true" />
           <div className="relative">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-foreground/15 px-3 py-1 text-xs font-semibold text-primary-foreground">
-              <ShieldCheck className="size-3.5" aria-hidden="true" />
-              Pendaftaran Dibuka
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-foreground/15 px-3 py-1 text-xs font-semibold text-primary-foreground">
+                <ShieldCheck className="size-3.5" aria-hidden="true" />
+                Pendaftaran Dibuka
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground">
+                <Clock className="size-3.5" aria-hidden="true" />
+                {countdownText}
+              </span>
+            </div>
             <div className="mt-4 flex items-center gap-3">
               <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
-                <FileText className="size-6" aria-hidden="true" />
+                {kategoriConfig.icon}
               </div>
               <div>
                 <h1 className="font-heading text-2xl font-bold leading-tight text-primary-foreground text-balance md:text-3xl">
-                  Auditphoria 6.0
+                  {kategoriConfig.code}
                 </h1>
-                <p className="text-sm text-primary-foreground/80">Formulir Pendaftaran Peserta</p>
+                <p className="text-sm text-primary-foreground/80">{kategoriConfig.label}</p>
               </div>
             </div>
           </div>
@@ -587,37 +851,16 @@ export function RegistrationForm() {
             <div className="space-y-8">
               <Section
                 number="1"
-                title="Kategori Lomba"
-                description="Pilih satu kategori — Anda akan langsung diarahkan ke pengisian data"
-              >
-                <div className="grid gap-3">
-                  {kategoriList.map((k) => (
-                    <KategoriCard
-                      key={k.value}
-                      kategori={k}
-                      selected={form.kategori === k.value}
-                      onPick={pickKategori}
-                    />
-                  ))}
-                </div>
-              </Section>
-            </div>
-          )}
-
-          {step === 1 && (
-            <div className="space-y-8">
-              <Section
-                number="2"
-                title={perorangan ? "Data Peserta" : "Data Tim"}
+                title={isTim ? "Data Tim" : "Data Peserta"}
                 description={
-                  perorangan
-                    ? `Kategori ${kategoriLabel} — lengkapi data diri Anda`
-                    : `Kategori ${kategoriLabel} — lengkapi informasi tim dan ketua tim`
+                  timMode === "opsional"
+                    ? "Boleh daftar sendiri atau berkelompok — kosongkan Nama Tim & anggota kalau daftar sendiri"
+                    : timMode === "wajib"
+                      ? "Lomba ini wajib diikuti secara berkelompok"
+                      : "Lengkapi data diri Anda"
                 }
               >
-                {/* Honeypot anti-bot: field ini disembunyikan dari manusia lewat CSS,
-                    tapi bot pengisi form otomatis biasanya tetap mengisinya.
-                    Kalau terisi, submit ditolak diam-diam di server. */}
+                {/* Honeypot anti-bot */}
                 <div className="absolute -left-[9999px] h-0 w-0 overflow-hidden opacity-0" aria-hidden="true">
                   <label htmlFor="website">Jangan isi field ini</label>
                   <input
@@ -631,20 +874,25 @@ export function RegistrationForm() {
                   />
                 </div>
 
-                {!perorangan && (
-                  <Field label="Nama Tim" required error={errors.namaTim} icon={<Users className="size-4" />}>
+                {isTim && (
+                  <Field
+                    label="Nama Tim"
+                    required={timWajib}
+                    error={errors.namaTim}
+                    icon={<Users className="size-4" />}
+                  >
                     <input
                       type="text"
                       value={form.namaTim}
                       onChange={(e) => update("namaTim", e.target.value)}
-                      placeholder="Masukkan nama tim"
+                      placeholder={timMode === "opsional" ? "Opsional — kosongkan kalau daftar sendiri" : "Masukkan nama tim"}
                       className={inputClass(!!errors.namaTim)}
                     />
                   </Field>
                 )}
 
                 <Field
-                  label={perorangan ? "Nama Lengkap Peserta" : "Nama Ketua Tim"}
+                  label={isTim ? "Nama Ketua Tim" : "Nama Lengkap Peserta"}
                   required
                   error={errors.ketua}
                   icon={<User className="size-4" />}
@@ -653,16 +901,18 @@ export function RegistrationForm() {
                     type="text"
                     value={form.ketua}
                     onChange={(e) => update("ketua", e.target.value)}
-                    placeholder={perorangan ? "Nama lengkap Anda" : "Nama lengkap ketua tim"}
+                    placeholder={isTim ? "Nama lengkap ketua tim" : "Nama lengkap Anda"}
                     className={inputClass(!!errors.ketua)}
                   />
                 </Field>
 
-                {!perorangan && (
+                {isTim && (
                   <div className="rounded-2xl border border-dashed border-border bg-secondary/40 p-4">
                     <p className="mb-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
                       <Users className="size-4" aria-hidden="true" />
-                      Anggota tim bersifat opsional (1&ndash;3 orang termasuk ketua)
+                      {timWajib
+                        ? "Anggota tim (1–3 orang termasuk ketua)"
+                        : "Anggota tim bersifat opsional (1–3 orang termasuk ketua)"}
                     </p>
                     <div className="grid gap-4 md:grid-cols-2">
                       <Field label="Nama Anggota 1" icon={<User className="size-4" />}>
@@ -715,7 +965,7 @@ export function RegistrationForm() {
 
                 <div className="grid gap-5 md:grid-cols-2">
                   <Field
-                    label={perorangan ? "No. Telepon Peserta" : "No. Telepon Ketua Tim"}
+                    label={isTim ? "No. Telepon Ketua Tim" : "No. Telepon Peserta"}
                     required
                     error={errors.telepon}
                     icon={<Phone className="size-4" />}
@@ -729,7 +979,7 @@ export function RegistrationForm() {
                     />
                   </Field>
                   <Field
-                    label={perorangan ? "Email Peserta" : "Email Ketua Tim"}
+                    label={isTim ? "Email Ketua Tim" : "Email Peserta"}
                     required
                     error={errors.email}
                     icon={<Mail className="size-4" />}
@@ -769,38 +1019,57 @@ export function RegistrationForm() {
                 </div>
               </Section>
 
-              <div className="flex gap-3">
-                <button type="button" onClick={() => goTo(0)} className={cn(ghostBtn, "flex-1")}>
-                  <ArrowLeft className="size-5" aria-hidden="true" />
-                  Ganti Kategori
-                </button>
-                <button type="button" onClick={handleNextData} className={cn(primaryBtn, "flex-1")}>
-                  Lanjut ke Berkas
-                  <ArrowRight className="size-5" aria-hidden="true" />
-                </button>
-              </div>
+              <button type="button" onClick={handleNextData} className={cn(primaryBtn, "w-full")}>
+                Lanjut ke Berkas
+                <ArrowRight className="size-5" aria-hidden="true" />
+              </button>
             </div>
           )}
 
-          {step === 2 && (
+          {step === 1 && (
             <div className="space-y-8">
-              <Section number="3" title="Unggah Berkas" description={`Kategori: ${kategoriLabel}`}>
-                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
-                  <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-primary">Berkas Karya</p>
-                  <FileField
-                    label={form.kategori ? kategoriKaryaLabel[form.kategori] : "File Karya"}
-                    hint={form.kategori ? kategoriKaryaHint[form.kategori] : "Unggah berkas karya"}
-                    accept={form.kategori ? kategoriKaryaAccept[form.kategori] : ".pdf"}
-                    icon={<FileText className="size-4" />}
-                    file={files.abstrak}
-                    onChange={setKarya}
-                    error={errors.abstrak}
-                  />
-                </div>
+              <Section number="2" title="Unggah Berkas" description={`Lomba: ${kategoriConfig.code} — ${kategoriConfig.label}`}>
+                {kategoriConfig.karya !== "none" && (
+                  <div className="space-y-4 rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-primary">Berkas / Link Karya</p>
+
+                    {(kategoriConfig.karya === "file" ||
+                      kategoriConfig.karya === "audio" ||
+                      kategoriConfig.karya === "file+link") && (
+                      <FileField
+                        label={kategoriConfig.karyaFileLabel ?? "File Karya"}
+                        hint={kategoriConfig.karyaFileHint ?? "Unggah berkas karya"}
+                        accept={kategoriConfig.karyaFileAccept ?? "*"}
+                        icon={kategoriConfig.karya === "audio" ? <Mic className="size-4" /> : <FileText className="size-4" />}
+                        file={files.karyaFile}
+                        onSelect={selectKaryaFile}
+                        onRemove={removeKaryaFile}
+                        error={errors.karyaFile}
+                      />
+                    )}
+
+                    {(kategoriConfig.karya === "link" || kategoriConfig.karya === "file+link") && (
+                      <Field
+                        label={kategoriConfig.karyaLinkLabel ?? "Link Karya"}
+                        required
+                        error={errors.karyaLink}
+                        icon={<Link2 className="size-4" />}
+                      >
+                        <input
+                          type="url"
+                          value={form.karyaLink}
+                          onChange={(e) => update("karyaLink", e.target.value)}
+                          placeholder={kategoriConfig.karyaLinkPlaceholder ?? "https://..."}
+                          className={inputClass(!!errors.karyaLink)}
+                        />
+                      </Field>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Berkas Umum (semua kategori) &middot; maks {MAX_BUKTI} file per berkas
+                    Berkas Umum (semua lomba) &middot; maks {MAX_BUKTI} file per berkas
                   </p>
                   <MultiFileField
                     label="Bukti Follow Instagram"
@@ -808,7 +1077,8 @@ export function RegistrationForm() {
                     accept="image/png,image/jpeg"
                     icon={<AtSign className="size-4" />}
                     files={files.followIg}
-                    onChange={(f) => setMulti("followIg", f)}
+                    onSelect={(f) => selectMulti("followIg", f, MAX_BUKTI)}
+                    onRemove={(i) => removeMulti("followIg", i)}
                     error={errors.followIg}
                     maxFiles={MAX_BUKTI}
                   />
@@ -818,7 +1088,8 @@ export function RegistrationForm() {
                     accept="image/png,image/jpeg,.pdf"
                     icon={<IdCard className="size-4" />}
                     files={files.ktm}
-                    onChange={(f) => setMulti("ktm", f)}
+                    onSelect={(f) => selectMulti("ktm", f, MAX_BUKTI)}
+                    onRemove={(i) => removeMulti("ktm", i)}
                     error={errors.ktm}
                     maxFiles={MAX_BUKTI}
                   />
@@ -828,7 +1099,8 @@ export function RegistrationForm() {
                     accept="image/png,image/jpeg"
                     icon={<MessageCircle className="size-4" />}
                     files={files.posterWa}
-                    onChange={(f) => setMulti("posterWa", f)}
+                    onSelect={(f) => selectMulti("posterWa", f, MAX_BUKTI)}
+                    onRemove={(i) => removeMulti("posterWa", i)}
                     error={errors.posterWa}
                     maxFiles={MAX_BUKTI}
                   />
@@ -838,7 +1110,8 @@ export function RegistrationForm() {
                     accept="image/png,image/jpeg"
                     icon={<Share2 className="size-4" />}
                     files={files.posterIg}
-                    onChange={(f) => setMulti("posterIg", f)}
+                    onSelect={(f) => selectMulti("posterIg", f, MAX_BUKTI)}
+                    onRemove={(i) => removeMulti("posterIg", i)}
                     error={errors.posterIg}
                     maxFiles={MAX_BUKTI}
                   />
@@ -848,7 +1121,8 @@ export function RegistrationForm() {
                     accept="image/png,image/jpeg"
                     icon={<ImageIcon className="size-4" />}
                     files={files.twibbon}
-                    onChange={(f) => setMulti("twibbon", f)}
+                    onSelect={(f) => selectMulti("twibbon", f, MAX_BUKTI)}
+                    onRemove={(i) => removeMulti("twibbon", i)}
                     error={errors.twibbon}
                     maxFiles={MAX_BUKTI}
                   />
@@ -856,7 +1130,7 @@ export function RegistrationForm() {
               </Section>
 
               <div className="flex gap-3">
-                <button type="button" onClick={() => goTo(1)} className={cn(ghostBtn, "flex-1")}>
+                <button type="button" onClick={() => goTo(0)} className={cn(ghostBtn, "flex-1")}>
                   <ArrowLeft className="size-5" aria-hidden="true" />
                   Kembali
                 </button>
@@ -868,9 +1142,9 @@ export function RegistrationForm() {
             </div>
           )}
 
-          {step === 3 && (
+          {step === 2 && (
             <div className="space-y-8">
-              <Section number="4" title="Pembayaran" description="Lakukan pembayaran lalu unggah bukti transfer">
+              <Section number="3" title="Pembayaran" description="Lakukan pembayaran lalu unggah bukti transfer">
                 <div className="grid gap-4 sm:grid-cols-2">
                   {/* QRIS */}
                   <div className="flex flex-col items-center rounded-2xl border border-border bg-card p-5 text-center">
@@ -928,23 +1202,21 @@ export function RegistrationForm() {
                   accept="image/png,image/jpeg,.pdf"
                   icon={<Upload className="size-4" />}
                   files={files.buktiBayar}
-                  onChange={(f) => setMulti("buktiBayar", f)}
+                  onSelect={(f) => selectMulti("buktiBayar", f, MAX_BAYAR)}
+                  onRemove={(i) => removeMulti("buktiBayar", i)}
                   error={errors.buktiBayar}
                   maxFiles={MAX_BAYAR}
                 />
               </Section>
 
               {submitError && (
-                <p
-                  role="status"
-                  className="rounded-lg bg-destructive/10 px-4 py-2.5 text-sm text-destructive"
-                >
+                <p role="status" className="rounded-lg bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
                   {submitError}
                 </p>
               )}
 
               <div className="flex gap-3">
-                <button type="button" onClick={() => goTo(2)} className={cn(ghostBtn, "flex-1")} disabled={submitting}>
+                <button type="button" onClick={() => goTo(1)} className={cn(ghostBtn, "flex-1")} disabled={submitting}>
                   <ArrowLeft className="size-5" aria-hidden="true" />
                   Kembali
                 </button>
@@ -955,13 +1227,7 @@ export function RegistrationForm() {
                   className={cn(primaryBtn, "flex-1", submitting && "opacity-70 pointer-events-none")}
                 >
                   <CheckCircle2 className="size-5" aria-hidden="true" />
-                  {submitPhase === "uploading"
-                    ? `Mengunggah berkas${uploadProgress ? ` (${uploadProgress})` : "…"}`
-                    : submitPhase === "saving"
-                      ? "Menyimpan data…"
-                      : submitting
-                        ? "Mengirim…"
-                        : "Kirim Pendaftaran"}
+                  {submitting ? "Mengirim…" : "Kirim Pendaftaran"}
                 </button>
               </div>
             </div>
@@ -987,11 +1253,62 @@ export function RegistrationForm() {
 
 /* ---------- Sub-komponen ---------- */
 
-/**
- * Hitung mundur menuju sebuah deadline, update setiap detik.
- * Mengembalikan teks yang siap ditampilkan + status apakah sudah lewat.
- */
-function useCountdown(deadline: string) {
+/** Halaman fallback kalau form dibuka tanpa parameter ?kategori= dari Google Sites. */
+function KategoriPicker({ onPick }: { onPick: (value: Exclude<KategoriValue, "">) => void }) {
+  return (
+    <div className="mx-auto max-w-2xl px-4 py-10 md:py-16">
+      <div className="overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-xl shadow-primary/5 md:p-10">
+        <div className="mb-6 text-center">
+          <h1 className="font-heading text-2xl font-bold text-foreground">Pendaftaran Auditphoria 6.0</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Link ini dibuka tanpa lomba spesifik. Pilih cabang lomba di bawah, atau gunakan link pendaftaran resmi
+            dari halaman lomba masing-masing.
+          </p>
+        </div>
+        <div className="grid gap-3">
+          {kategoriList.map((k) => (
+            <button
+              key={k.value}
+              type="button"
+              onClick={() => onPick(k.value)}
+              className="group flex items-center gap-4 rounded-2xl border border-input bg-background p-4 text-left transition-all hover:border-primary/40 hover:bg-secondary/40"
+            >
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
+                {k.icon}
+              </span>
+              <span className="flex-1">
+                <span className="block font-heading text-base font-bold text-foreground">
+                  {k.code} — {k.label}
+                </span>
+                <span className="block text-xs text-muted-foreground">{k.desc}</span>
+              </span>
+              <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PendaftaranDitutup({ kategoriConfig }: { kategoriConfig: KategoriConfig }) {
+  return (
+    <div className="mx-auto max-w-2xl px-4 py-16">
+      <div className="overflow-hidden rounded-3xl border border-border bg-card p-8 text-center shadow-xl">
+        <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+          <Clock className="size-8" aria-hidden="true" />
+        </div>
+        <h1 className="font-heading text-xl font-bold text-foreground">Pendaftaran {kategoriConfig.code} Ditutup</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Batas waktu pendaftaran untuk {kategoriConfig.label} sudah berakhir. Hubungi panitia jika ada pertanyaan.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/** Hitung mundur menuju sebuah deadline, update setiap detik. */
+function useCountdownValue(deadline: string) {
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -1003,9 +1320,7 @@ function useCountdown(deadline: string) {
   const diff = target - now
   const expired = diff <= 0
 
-  if (expired) {
-    return { text: "Pendaftaran ditutup", expired: true }
-  }
+  if (expired) return { text: "Pendaftaran ditutup", expired: true }
 
   const totalSeconds = Math.floor(diff / 1000)
   const days = Math.floor(totalSeconds / 86400)
@@ -1019,75 +1334,6 @@ function useCountdown(deadline: string) {
   else text = `${minutes}m ${seconds}d lagi`
 
   return { text, expired: false }
-}
-
-function KategoriCard({
-  kategori,
-  selected,
-  onPick,
-}: {
-  kategori: (typeof kategoriList)[number]
-  selected: boolean
-  onPick: (value: Exclude<Kategori, "">) => void
-}) {
-  const { text, expired } = useCountdown(kategoriDeadline[kategori.value])
-
-  return (
-    <button
-      type="button"
-      disabled={expired}
-      aria-disabled={expired}
-      onClick={() => {
-        if (!expired) onPick(kategori.value)
-      }}
-      className={cn(
-        "group flex items-center gap-4 rounded-2xl border p-4 text-left transition-all",
-        expired
-          ? "cursor-not-allowed border-border bg-secondary/30 opacity-60 grayscale"
-          : selected
-            ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-            : "border-input bg-background hover:border-primary/40 hover:bg-secondary/40",
-      )}
-    >
-      <span
-        className={cn(
-          "flex size-12 shrink-0 items-center justify-center rounded-xl transition-colors",
-          !expired && selected ? "bg-primary text-primary-foreground" : "bg-secondary text-primary",
-        )}
-      >
-        {kategori.icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block font-heading text-base font-bold text-foreground">{kategori.label}</span>
-        <span className="block text-xs text-muted-foreground">{kategori.desc}</span>
-        <span
-          className={cn(
-            "mt-1 flex items-center gap-1 text-[11px] font-semibold",
-            expired ? "text-destructive" : "text-primary",
-          )}
-        >
-          <Clock className="size-3" aria-hidden="true" />
-          {text}
-        </span>
-      </span>
-      <span
-        className={cn(
-          "flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-          kategori.perorangan ? "bg-accent/20 text-accent-foreground" : "bg-secondary text-muted-foreground",
-        )}
-      >
-        {kategori.perorangan ? (
-          <>
-            <UserRound className="size-3" aria-hidden="true" /> Perorangan
-          </>
-        ) : (
-          <>
-            <Users className="size-3" aria-hidden="true" /> Beregu
-          </>
-        )}
-      </span>
-    </button>
-  )
 }
 
 function Stepper({ current }: { current: number }) {
@@ -1136,15 +1382,17 @@ function FileField({
   accept,
   icon,
   file,
-  onChange,
+  onSelect,
+  onRemove,
   error,
 }: {
   label: string
   hint: string
   accept: string
   icon: React.ReactNode
-  file: File | null
-  onChange: (file: File | null) => void
+  file: FileSlot | null
+  onSelect: (file: File | null) => void
+  onRemove: () => void
   error?: string
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -1165,15 +1413,21 @@ function FileField({
           )}
         >
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <FileText className="size-4" aria-hidden="true" />
+            {file.uploading ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <FileText className="size-4" aria-hidden="true" />
+            )}
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium text-foreground">{file.name}</span>
-            <span className="block text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</span>
+            <span className="block text-xs text-muted-foreground">
+              {file.uploading ? "Mengunggah…" : `${(file.size / 1024 / 1024).toFixed(1)} MB · tersimpan`}
+            </span>
           </span>
           <button
             type="button"
-            onClick={() => onChange(null)}
+            onClick={onRemove}
             aria-label={`Hapus ${label}`}
             className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
           >
@@ -1206,7 +1460,10 @@ function FileField({
         type="file"
         accept={accept}
         className="sr-only"
-        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+        onChange={(e) => {
+          onSelect(e.target.files?.[0] ?? null)
+          e.target.value = ""
+        }}
       />
       {error && <p className="text-xs font-medium text-destructive">{error}</p>}
     </div>
@@ -1219,7 +1476,8 @@ function MultiFileField({
   accept,
   icon,
   files,
-  onChange,
+  onSelect,
+  onRemove,
   error,
   maxFiles,
 }: {
@@ -1227,8 +1485,9 @@ function MultiFileField({
   hint: string
   accept: string
   icon: React.ReactNode
-  files: File[]
-  onChange: (files: File[]) => void
+  files: FileSlot[]
+  onSelect: (files: File[]) => void
+  onRemove: (index: number) => void
   error?: string
   maxFiles: number
 }) {
@@ -1237,14 +1496,8 @@ function MultiFileField({
 
   function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(e.target.files ?? [])
-    if (selected.length > 0) {
-      onChange([...files, ...selected].slice(0, maxFiles))
-    }
+    if (selected.length > 0) onSelect(selected)
     e.target.value = ""
-  }
-
-  function removeAt(index: number) {
-    onChange(files.filter((_, i) => i !== index))
   }
 
   return (
@@ -1262,19 +1515,25 @@ function MultiFileField({
         <ul className="space-y-2">
           {files.map((file, i) => (
             <li
-              key={`${file.name}-${i}`}
+              key={file.id}
               className="flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 px-4 py-2.5"
             >
               <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <ImageIcon className="size-4" aria-hidden="true" />
+                {file.uploading ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <ImageIcon className="size-4" aria-hidden="true" />
+                )}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-foreground">{file.name}</span>
-                <span className="block text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</span>
+                <span className="block text-xs text-muted-foreground">
+                  {file.uploading ? "Mengunggah…" : `${(file.size / 1024).toFixed(0)} KB · tersimpan`}
+                </span>
               </span>
               <button
                 type="button"
-                onClick={() => removeAt(i)}
+                onClick={() => onRemove(i)}
                 aria-label={`Hapus ${file.name}`}
                 className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
               >
@@ -1314,14 +1573,7 @@ function MultiFileField({
         </p>
       )}
 
-      <input
-        ref={inputRef}
-        type="file"
-        accept={accept}
-        multiple
-        className="sr-only"
-        onChange={handleSelect}
-      />
+      <input ref={inputRef} type="file" accept={accept} multiple className="sr-only" onChange={handleSelect} />
       {error && <p className="text-xs font-medium text-destructive">{error}</p>}
     </div>
   )
@@ -1329,21 +1581,21 @@ function MultiFileField({
 
 function SuccessScreen({
   form,
-  perorangan,
+  kategoriConfig,
   onReset,
   referenceId,
 }: {
   form: FormState
-  perorangan: boolean
+  kategoriConfig: KategoriConfig
   onReset: () => void
   referenceId: string
 }) {
-  const kategori = kategoriList.find((k) => k.value === form.kategori)?.label ?? "-"
+  const isTim = kategoriConfig.timMode !== "solo"
 
   function handleDownload() {
     downloadReceiptFile({
       referenceId,
-      kategoriLabel: kategori,
+      kategoriLabel: `${kategoriConfig.code} — ${kategoriConfig.label}`,
       namaTim: form.namaTim,
       ketua: form.ketua,
       sekolah: form.sekolah,
@@ -1374,14 +1626,17 @@ function SuccessScreen({
           <p className="text-center text-pretty leading-relaxed text-muted-foreground">
             Terima kasih,{" "}
             <span className="font-semibold text-foreground">
-              {perorangan ? form.ketua : `tim ${form.namaTim}`}
+              {isTim && form.namaTim ? `tim ${form.namaTim}` : form.ketua}
             </span>
-            . Pendaftaran Anda untuk kategori <span className="font-semibold text-foreground">{kategori}</span> sedang
-            kami verifikasi.
+            . Pendaftaran Anda untuk lomba{" "}
+            <span className="font-semibold text-foreground">
+              {kategoriConfig.code} — {kategoriConfig.label}
+            </span>{" "}
+            sedang kami verifikasi.
           </p>
           <dl className="mt-6 space-y-2 rounded-2xl border border-border bg-secondary/40 p-5 text-sm">
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">{perorangan ? "Nama Peserta" : "Ketua Tim"}</dt>
+              <dt className="text-muted-foreground">{isTim ? "Ketua Tim" : "Nama Peserta"}</dt>
               <dd className="font-medium text-foreground">{form.ketua}</dd>
             </div>
             <div className="flex justify-between gap-4">
@@ -1394,7 +1649,7 @@ function SuccessScreen({
             </div>
           </dl>
           <p className="mt-4 text-center text-xs text-muted-foreground">
-            Konfirmasi lolos verifikasi akan dikirim ke email {perorangan ? "peserta" : "ketua tim"}.
+            Konfirmasi lolos verifikasi akan dikirim ke email {isTim ? "ketua tim" : "peserta"}.
           </p>
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             <button
