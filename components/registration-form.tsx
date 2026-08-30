@@ -51,6 +51,10 @@ import { cn } from "@/lib/utils"
  *     { type: "file+link" }         -> upload 1 file DAN isi 1 link
  *     { type: "audio" }             -> upload 1 file audio (maks 100MB)
  *     { type: "none" }              -> tidak ada berkas karya sama sekali
+ *
+ * CATATAN REVISI: AEC di-set "none" karena unggah abstrak/essay dipindah
+ * keluar dari form pendaftaran ini — pengumpulan karya AEC akan pakai
+ * link/form terpisah menyusul kemudian (bukan bagian dari pendaftaran).
  * ========================================================================= */
 
 type KategoriValue = "aec" | "arc" | "aice" | "avoc" | "lcca" | ""
@@ -80,10 +84,9 @@ const kategoriList: KategoriConfig[] = [
     desc: "Kompetisi menulis esai bertema audit — individu atau tim",
     timMode: "opsional",
     icon: <ScrollText className="size-5" aria-hidden="true" />,
-    karya: "file",
-    karyaFileLabel: "File Abstrak Essay",
-    karyaFileHint: "Tahap pengumpulan abstrak — PDF / DOC / DOCX · maks 10MB",
-    karyaFileAccept: ".pdf,.doc,.docx",
+    // Revisi: unggah abstrak/essay dihapus dari form pendaftaran — akan
+    // dikumpulkan lewat link/form terpisah setelah pendaftaran.
+    karya: "none",
   },
   {
     value: "arc",
@@ -188,7 +191,6 @@ type FileState = {
   karyaFile: FileSlot | null
   followIg: FileSlot[]
   ktm: FileSlot[]
-  posterWa: FileSlot[]
   posterIg: FileSlot[]
   twibbon: FileSlot[]
   buktiBayar: FileSlot[]
@@ -212,7 +214,6 @@ const initialFiles: FileState = {
   karyaFile: null,
   followIg: [],
   ktm: [],
-  posterWa: [],
   posterIg: [],
   twibbon: [],
   buktiBayar: [],
@@ -332,7 +333,6 @@ function sanitizeFilesForDraft(files: FileState): FileState {
     karyaFile: files.karyaFile && !files.karyaFile.uploading && files.karyaFile.url ? files.karyaFile : null,
     followIg: clean(files.followIg),
     ktm: clean(files.ktm),
-    posterWa: clean(files.posterWa),
     posterIg: clean(files.posterIg),
     twibbon: clean(files.twibbon),
     buktiBayar: clean(files.buktiBayar),
@@ -341,7 +341,7 @@ function sanitizeFilesForDraft(files: FileState): FileState {
 
 function hasPendingUploads(files: FileState) {
   if (files.karyaFile?.uploading) return true
-  return [files.followIg, files.ktm, files.posterWa, files.posterIg, files.twibbon, files.buktiBayar].some((list) =>
+  return [files.followIg, files.ktm, files.posterIg, files.twibbon, files.buktiBayar].some((list) =>
     list.some((f) => f.uploading),
   )
 }
@@ -531,7 +531,6 @@ function RegistrationFormInner() {
       !files.karyaFile &&
       files.followIg.length === 0 &&
       files.ktm.length === 0 &&
-      files.posterWa.length === 0 &&
       files.posterIg.length === 0 &&
       files.twibbon.length === 0 &&
       files.buktiBayar.length === 0 &&
@@ -668,7 +667,6 @@ function RegistrationFormInner() {
 
     if (files.followIg.length === 0) next.followIg = "Bukti follow Instagram wajib diunggah"
     if (files.ktm.length === 0) next.ktm = "Scan KTM/identitas mahasiswa wajib diunggah"
-    if (files.posterWa.length === 0) next.posterWa = "Bukti share poster di grup WA wajib diunggah"
     if (files.posterIg.length === 0) next.posterIg = "Bukti share poster di IG story wajib diunggah"
     if (files.twibbon.length === 0) next.twibbon = "Bukti upload twibbon wajib diunggah"
     setErrors(next)
@@ -711,7 +709,6 @@ function RegistrationFormInner() {
       const fileUrls: Record<string, string[]> = {
         followIg: files.followIg.map((f) => f.url).filter((u): u is string => !!u),
         ktm: files.ktm.map((f) => f.url).filter((u): u is string => !!u),
-        posterWa: files.posterWa.map((f) => f.url).filter((u): u is string => !!u),
         posterIg: files.posterIg.map((f) => f.url).filter((u): u is string => !!u),
         twibbon: files.twibbon.map((f) => f.url).filter((u): u is string => !!u),
         buktiBayar: files.buktiBayar.map((f) => f.url).filter((u): u is string => !!u),
@@ -722,12 +719,11 @@ function RegistrationFormInner() {
         karyaFile: kategoriConfig.karyaFileLabel ?? "Karya",
         followIg: "Bukti Follow IG",
         ktm: "KTM/Identitas",
-        posterWa: "Bukti Share Poster WA",
         posterIg: "Bukti Share Poster IG",
         twibbon: "Bukti Upload Twibbon",
         buktiBayar: "Bukti Pembayaran",
       }
-      const requiredFields = ["followIg", "ktm", "posterWa", "posterIg", "twibbon", "buktiBayar"]
+      const requiredFields = ["followIg", "ktm", "posterIg", "twibbon", "buktiBayar"]
       if (kategoriConfig.karya === "file" || kategoriConfig.karya === "audio" || kategoriConfig.karya === "file+link") {
         requiredFields.push("karyaFile")
       }
@@ -1132,7 +1128,7 @@ function RegistrationFormInner() {
 
                 <div className="space-y-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Berkas Umum &middot; maks {MAX_BUKTI} file per berkas
+                    Berkas Umum (semua lomba) &middot; maks {MAX_BUKTI} file per berkas
                   </p>
                   <MultiFileField
                     label="Bukti Follow Instagram"
@@ -1154,17 +1150,6 @@ function RegistrationFormInner() {
                     onSelect={(f) => selectMulti("ktm", f, MAX_BUKTI)}
                     onRemove={(i) => removeMulti("ktm", i)}
                     error={errors.ktm}
-                    maxFiles={MAX_BUKTI}
-                  />
-                  <MultiFileField
-                    label="Bukti Share Poster di Grup WA"
-                    hint="Screenshot poster dibagikan ke grup WhatsApp — JPG / PNG · maks 10MB"
-                    accept="image/png,image/jpeg"
-                    icon={<MessageCircle className="size-4" />}
-                    files={files.posterWa}
-                    onSelect={(f) => selectMulti("posterWa", f, MAX_BUKTI)}
-                    onRemove={(i) => removeMulti("posterWa", i)}
-                    error={errors.posterWa}
                     maxFiles={MAX_BUKTI}
                   />
                   <MultiFileField
