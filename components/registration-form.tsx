@@ -951,7 +951,7 @@ function RegistrationFormInner() {
                 )}
 
                 <Field
-                  label={isTim ? "Nama Ketua Tim" : "Nama Lengkap Peserta"}
+                  label={isTim ? "Nama Ketua Tim/Peserta" : "Nama Lengkap Peserta"}
                   required
                   error={errors.ketua}
                   icon={<User className="size-4" />}
@@ -1128,7 +1128,7 @@ function RegistrationFormInner() {
 
                 <div className="space-y-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Berkas Umum (semua lomba) &middot; maks {MAX_BUKTI} file per berkas
+                    Berkas Umum &middot; maks {MAX_BUKTI} file per berkas
                   </p>
                   <MultiFileField
                     label="Bukti Follow Instagram"
