@@ -26,7 +26,14 @@ export function ParticleBackground() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
+      // Sebelumnya "-z-10" — z-index NEGATIF di sini yang bikin animasi tidak
+      // pernah kelihatan: <body> di globals.css punya bg-background tapi
+      // position-nya "static" (default), jadi background body itu digambar
+      // SETELAH (menutupi) elemen ber-z-index negatif di dalamnya. Dengan
+      // z-0, elemen ini tetap di belakang konten form (karena dirender lebih
+      // dulu di JSX & konten form biasanya z-auto/positioned di atasnya),
+      // tapi tidak lagi ketutupan background body.
+      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
     >
       {dots.map((dot, i) => (
         <span
