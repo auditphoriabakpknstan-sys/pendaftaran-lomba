@@ -34,6 +34,7 @@ import {
   Clock,
   Download,
   Loader2,
+  ExternalLink,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -130,6 +131,19 @@ const KATEGORI_CONTACT: Record<Exclude<KategoriValue, "">, { nama: string; whats
   aice: { nama: "Nasywa", whatsapp: "6282350128556" },
   avoc: { nama: "Thania", whatsapp: "6289671315301" },
   lcca: { nama: "Nazhila", whatsapp: "6289668665861" },
+}
+
+/**
+ * Link lanjutan (grup WhatsApp / info lomba) khusus tiap cabang — ditampilkan
+ * di halaman terakhir setelah pendaftaran berhasil, sesuai kategori yang
+ * didaftarkan peserta.
+ */
+const KATEGORI_LINK: Record<Exclude<KategoriValue, "">, string> = {
+  aec: "http://staner.id/AECAuditphoria6",
+  arc: "http://staner.id/ARCAuditphoria6",
+  aice: "http://staner.id/AICEAuditphoria6",
+  avoc: "http://staner.id/WAGAVOCAuditphoria6",
+  lcca: "http://staner.id/WAGLCCAAuditphoria6",
 }
 
 type FormState = {
@@ -409,7 +423,6 @@ function downloadReceiptFile(receipt: ReceiptData) {
     "  BUKTI PENDAFTARAN — AUDITPHORIA 6.0",
     "==============================================",
     "",
-    `Nomor Referensi : ${receipt.referenceId}`,
     `Cabang Lomba     : ${receipt.kategoriLabel}`,
     `Nama Tim/Peserta : ${receipt.namaTim || "-"}`,
     `Nama Ketua       : ${receipt.ketua}`,
@@ -419,8 +432,8 @@ function downloadReceiptFile(receipt: ReceiptData) {
     `Waktu Daftar     : ${new Date(receipt.savedAt).toLocaleString("id-ID", { dateStyle: "full", timeStyle: "short" })}`,
     "",
     "Simpan bukti ini sebagai referensi. Jika ada",
-    "pertanyaan, sertakan Nomor Referensi di atas",
-    "saat menghubungi panitia.",
+    "pertanyaan, sertakan data di atas saat",
+    "menghubungi panitia.",
     "==============================================",
   ]
   const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" })
@@ -777,9 +790,7 @@ function RegistrationFormInner() {
       {step === 0 && lastReceipt && (
         <div className="mb-4 flex flex-col items-start gap-3 rounded-2xl border border-primary/30 bg-card/95 p-4 shadow-lg shadow-black/20 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-foreground">
-            Anda pernah mendaftar sebelumnya dengan No. Referensi{" "}
-            <span className="font-mono font-semibold">{lastReceipt.referenceId}</span>. Belum sempat menyimpan
-            buktinya?
+            Anda pernah mendaftar sebelumnya untuk kategori ini. Belum sempat menyimpan buktinya?
           </p>
           <div className="flex shrink-0 gap-2">
             <button
@@ -1497,9 +1508,6 @@ function SuccessScreen({
             <h1 className="font-heading text-2xl font-bold text-primary-foreground text-balance">
               Pendaftaran Terkirim!
             </h1>
-            {referenceId && (
-              <p className="mt-1 font-mono text-sm text-primary-foreground/80">No. Referensi: {referenceId}</p>
-            )}
           </div>
         </div>
         <div className="px-8 py-8">
@@ -1531,6 +1539,24 @@ function SuccessScreen({
           <p className="mt-4 text-center text-xs text-muted-foreground">
             Konfirmasi lolos verifikasi akan dikirim ke email {isTim ? "ketua tim" : "peserta"}.
           </p>
+
+          <div className="mt-6 rounded-2xl border border-primary/30 bg-primary/5 p-5 text-center">
+            <p className="text-sm font-semibold text-foreground">Langkah Selanjutnya</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Klik tombol di bawah untuk lanjut ke info resmi {kategoriConfig.code} — informasi teknis dan update
+              lomba akan dibagikan di sana.
+            </p>
+            <a
+              href={KATEGORI_LINK[kategoriConfig.value]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:brightness-110"
+            >
+              <ExternalLink className="size-4" aria-hidden="true" />
+              Lanjut ke Info {kategoriConfig.code}
+            </a>
+          </div>
+
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             <button
               type="button"
