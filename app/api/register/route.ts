@@ -13,45 +13,19 @@ const KATEGORI_LABEL: Record<string, string> = {
   lcca: "LCCA - Lomba Cerdas Cermat Audit",
 }
 
-// CATATAN REVISI: "posterWa" dan "posterIg" (bukti share poster di IG
-// story/WA) dihapus dari daftar berkas wajib — tidak tercantum di handbook
-// manapun. Field "fotoDiri" (foto diri masing-masing anggota) ditambahkan
-// sesuai handbook mekanisme pendaftaran.
-const COMMON_FILE_FIELDS = ["followIg", "ktm", "fotoDiri", "twibbon", "buktiBayar"] as const
-
-// PENTING: nama field di sini HARUS sama dengan key yang benar-benar dikirim
-// dari form (lihat fileUrls di handleSubmit pada registration-form.tsx).
-// Form selalu mengirim berkas karya dengan key "karyaFile", apa pun jenis
-// lombanya (termasuk audio) — nama "karyaAudio"/"abstrak" cuma dipakai untuk
-// penamaan path di Vercel Blob, BUKAN key yang dikirim ke /api/register.
-// Kalau nama di sini tidak cocok, validasi akan SELALU gagal walau berkas
-// sudah diunggah.
-const KATEGORI_FILE_REQUIREMENTS: Record<string, string[]> = {
-  aec: [], // revisi: unggah berkas karya AEC dipindah ke link/form terpisah, bukan bagian dari pendaftaran ini
-  arc: [],
-  aice: ["karyaFile"],
-  avoc: ["karyaFile"],
-  lcca: [],
-}
-
-const KATEGORI_BUTUH_LINK: Record<string, boolean> = {
-  aec: false,
-  arc: true,
-  aice: true,
-  avoc: false,
-  lcca: false,
-}
+// CATATAN REVISI: Berkas/link karya (upload essay/abstrak, link reels IG,
+// infografis, audio voice over) DIHAPUS TOTAL dari alur pendaftaran ini.
+// Semua kategori sekarang hanya wajib mengunggah 5 berkas umum di bawah —
+// tidak ada lagi requirement tambahan per kategori (karyaFile / karyaLink).
+const REQUIRED_FILE_FIELDS = ["followIg", "ktm", "fotoDiri", "twibbon", "buktiBayar"] as const
 
 const FILE_LABELS: Record<string, string> = {
-  karyaFile: "Berkas Karya",
   followIg: "Bukti Follow IG",
   ktm: "KTM - Identitas",
   fotoDiri: "Foto Diri Anggota",
   twibbon: "Bukti Upload Twibbon",
   buktiBayar: "Bukti Pembayaran",
 }
-
-const IG_LINK_REGEX = /^https?:\/\/(www\.)?instagram\.com\/.+/i
 
 const dataSchema = z.object({
   kategori: z.enum(["aec", "arc", "aice", "avoc", "lcca"], {
@@ -72,7 +46,6 @@ const dataSchema = z.object({
   referenceId: z.string().optional().default(""),
   website: z.string().optional().default(""),
   formLoadedAt: z.number().optional().default(0),
-  karyaLink: z.string().optional().default(""),
   fileUrls: z.record(z.array(z.string())).optional().default({}),
 })
 
@@ -136,23 +109,7 @@ export async function POST(req: Request) {
       )
     }
 
-    if (KATEGORI_BUTUH_LINK[data.kategori]) {
-      if (!data.karyaLink.trim()) {
-        return NextResponse.json(
-          { ok: false, message: "Link Instagram wajib diisi untuk kategori ini." },
-          { status: 400 },
-        )
-      }
-      if (!IG_LINK_REGEX.test(data.karyaLink.trim())) {
-        return NextResponse.json(
-          { ok: false, message: "Link harus berupa URL Instagram (instagram.com/...)." },
-          { status: 400 },
-        )
-      }
-    }
-
-    const requiredFileFields = [...COMMON_FILE_FIELDS, ...(KATEGORI_FILE_REQUIREMENTS[data.kategori] ?? [])]
-    for (const field of requiredFileFields) {
+    for (const field of REQUIRED_FILE_FIELDS) {
       const urls = data.fileUrls[field]
       if (!urls || urls.length === 0) {
         return NextResponse.json(
@@ -177,7 +134,6 @@ export async function POST(req: Request) {
         kota: data.kota,
         telepon: data.telepon,
         email: data.email,
-        karyaLink: data.karyaLink,
         fileUrls: data.fileUrls,
       }),
       redirect: "follow",
