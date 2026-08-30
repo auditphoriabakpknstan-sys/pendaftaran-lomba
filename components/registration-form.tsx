@@ -6,7 +6,6 @@ import { useState, useRef, useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Image from "next/image"
 import {
-  FileText,
   User,
   Users,
   Mail,
@@ -22,7 +21,6 @@ import {
   AtSign,
   IdCard,
   MessageCircle,
-  Share2,
   Image as ImageIcon,
   Palette,
   UserRound,
@@ -36,7 +34,6 @@ import {
   Clock,
   Download,
   Loader2,
-  Link2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -45,21 +42,16 @@ import { cn } from "@/lib/utils"
  * =========================================================================
  * Ubah/tambah lomba dari SATU tempat ini. Setiap lomba (kategori) punya:
  * - timMode: "solo" (perorangan saja) | "opsional" (boleh sendiri/tim) | "wajib" (harus tim)
- * - karya: jenis berkas karya yang diminta khusus lomba itu:
- *     { type: "file" }              -> upload 1 file (essay/abstrak dsb)
- *     { type: "link" }              -> isi 1 link (URL video/postingan)
- *     { type: "file+link" }         -> upload 1 file DAN isi 1 link
- *     { type: "audio" }             -> upload 1 file audio (maks 100MB)
- *     { type: "none" }              -> tidak ada berkas karya sama sekali
  *
- * CATATAN REVISI: AEC di-set "none" karena unggah abstrak/essay dipindah
- * keluar dari form pendaftaran ini — pengumpulan karya AEC akan pakai
- * link/form terpisah menyusul kemudian (bukan bagian dari pendaftaran).
+ * CATATAN REVISI: Berkas/link karya (upload essay/abstrak, link reels IG,
+ * infografis, audio voice over) DIHAPUS TOTAL dari form pendaftaran ini.
+ * Semua kategori sekarang hanya minta 5 berkas umum yang sama (lihat
+ * bagian "Berkas Umum" di bawah) — pengumpulan karya dilakukan lewat
+ * mekanisme terpisah di luar form ini.
  * ========================================================================= */
 
 type KategoriValue = "aec" | "arc" | "aice" | "avoc" | "lcca" | ""
 type TimMode = "solo" | "opsional" | "wajib"
-type KaryaType = "file" | "link" | "file+link" | "audio" | "none"
 
 type KategoriConfig = {
   value: Exclude<KategoriValue, "">
@@ -68,12 +60,6 @@ type KategoriConfig = {
   desc: string
   timMode: TimMode
   icon: React.ReactNode
-  karya: KaryaType
-  karyaFileLabel?: string
-  karyaFileHint?: string
-  karyaFileAccept?: string
-  karyaLinkLabel?: string
-  karyaLinkPlaceholder?: string
 }
 
 const kategoriList: KategoriConfig[] = [
@@ -84,9 +70,6 @@ const kategoriList: KategoriConfig[] = [
     desc: "Kompetisi menulis esai bertema audit — individu atau tim",
     timMode: "opsional",
     icon: <ScrollText className="size-5" aria-hidden="true" />,
-    // Revisi: unggah abstrak/essay dihapus dari form pendaftaran — akan
-    // dikumpulkan lewat link/form terpisah setelah pendaftaran.
-    karya: "none",
   },
   {
     value: "arc",
@@ -95,9 +78,6 @@ const kategoriList: KategoriConfig[] = [
     desc: "Kompetisi reels Instagram bertema audit — perorangan",
     timMode: "solo",
     icon: <Video className="size-5" aria-hidden="true" />,
-    karya: "link",
-    karyaLinkLabel: "Link Video Reels Instagram",
-    karyaLinkPlaceholder: "https://www.instagram.com/reel/...",
   },
   {
     value: "aice",
@@ -106,12 +86,6 @@ const kategoriList: KategoriConfig[] = [
     desc: "Kompetisi desain infografis bertema audit — perorangan",
     timMode: "solo",
     icon: <Palette className="size-5" aria-hidden="true" />,
-    karya: "file+link",
-    karyaFileLabel: "File Infografis (PDF)",
-    karyaFileHint: "Unggah karya infografis — PDF · maks 10MB",
-    karyaFileAccept: ".pdf",
-    karyaLinkLabel: "Link Postingan Infografis di Instagram",
-    karyaLinkPlaceholder: "https://www.instagram.com/p/...",
   },
   {
     value: "avoc",
@@ -120,10 +94,6 @@ const kategoriList: KategoriConfig[] = [
     desc: "Kompetisi voice over bertema audit — perorangan",
     timMode: "solo",
     icon: <Mic className="size-5" aria-hidden="true" />,
-    karya: "audio",
-    karyaFileLabel: "File Audio Voice Over",
-    karyaFileHint: "Format MP3 / WAV / M4A · maks 100MB",
-    karyaFileAccept: "audio/*,.mp3,.wav,.m4a,.aac,.ogg",
   },
   {
     value: "lcca",
@@ -132,7 +102,6 @@ const kategoriList: KategoriConfig[] = [
     desc: "Cerdas cermat bertema audit — wajib tim",
     timMode: "wajib",
     icon: <BrainCircuit className="size-5" aria-hidden="true" />,
-    karya: "none",
   },
 ]
 
@@ -174,7 +143,6 @@ type FormState = {
   email: string
   pakta: boolean
   kategori: KategoriValue
-  karyaLink: string
 }
 
 /** Satu slot berkas: bisa lagi diunggah, sudah selesai (ada url), atau gagal (ada error). */
@@ -188,7 +156,6 @@ type FileSlot = {
 }
 
 type FileState = {
-  karyaFile: FileSlot | null
   followIg: FileSlot[]
   ktm: FileSlot[]
   fotoDiri: FileSlot[]
@@ -207,11 +174,9 @@ const initialForm: FormState = {
   email: "",
   pakta: false,
   kategori: "",
-  karyaLink: "",
 }
 
 const initialFiles: FileState = {
-  karyaFile: null,
   followIg: [],
   ktm: [],
   fotoDiri: [],
@@ -221,8 +186,7 @@ const initialFiles: FileState = {
 
 const MAX_BUKTI = 10
 const MAX_BAYAR = 5
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB — default untuk berkas non-audio
-const MAX_AUDIO_SIZE = 100 * 1024 * 1024 // 100MB — khusus AVOC
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
 /**
  * Jadwal pendaftaran per kategori, dibagi jadi beberapa batch. Peserta bisa
@@ -230,23 +194,15 @@ const MAX_AUDIO_SIZE = 100 * 1024 * 1024 // 100MB — khusus AVOC
  * di bawah — di luar itu (sebelum batch 1 mulai, atau setelah batch
  * terakhir berakhir) pendaftaran otomatis dianggap tutup.
  * Format tanggal: "YYYY-MM-DDTHH:mm:ss" (waktu lokal WIB).
- *
- * CATATAN: AVOC tidak disebutkan punya jadwal batch terpisah — masih pakai
- * 1 batch tunggal sebagai placeholder. Ganti tanggalnya sesuai kebutuhan.
  */
 type Batch = { label: string; start: string; end: string }
 
 const kategoriBatches: Record<Exclude<KategoriValue, "">, Batch[]> = {
-  // KHUSUS AEC — Batch 1 sengaja dimajukan mulai dari hari ini (bukan
-  // 1 September) supaya bisa langsung dites tanpa nunggu. Batch 2 & 3 tetap
-  // sesuai jadwal resmi.
   aec: [
     { label: "Batch 1", start: "2026-08-30T00:00:00", end: "2026-09-14T23:59:59" },
     { label: "Batch 2", start: "2026-09-15T00:00:00", end: "2026-10-05T23:59:59" },
     { label: "Batch 3", start: "2026-10-06T00:00:00", end: "2026-10-19T23:59:59" },
   ],
-  // REVISI: Batch 1 SEMUA kategori sekarang dibuka mulai hari ini (bukan
-  // 1 September) — bukan cuma AEC. Batch 2 & 3 tetap sesuai jadwal resmi.
   lcca: [
     { label: "Batch 1", start: "2026-08-30T00:00:00", end: "2026-09-14T23:59:59" },
     { label: "Batch 2", start: "2026-09-15T00:00:00", end: "2026-10-05T23:59:59" },
@@ -257,13 +213,10 @@ const kategoriBatches: Record<Exclude<KategoriValue, "">, Batch[]> = {
     { label: "Batch 2", start: "2026-09-15T00:00:00", end: "2026-10-05T23:59:59" },
     { label: "Batch 3", start: "2026-10-06T00:00:00", end: "2026-10-19T23:59:59" },
   ],
-  // ARC cuma 2 batch, dan batch 2-nya lebih panjang (sampai 12 Oktober, bukan 5 Oktober)
   arc: [
     { label: "Batch 1", start: "2026-08-30T00:00:00", end: "2026-09-14T23:59:59" },
     { label: "Batch 2", start: "2026-09-15T00:00:00", end: "2026-10-12T23:59:59" },
   ],
-  // REVISI: AVOC sebelumnya cuma placeholder 1 batch — sekarang mengikuti
-  // pola 3 batch yang sama seperti LCCA/AICE.
   avoc: [
     { label: "Batch 1", start: "2026-08-30T00:00:00", end: "2026-09-14T23:59:59" },
     { label: "Batch 2", start: "2026-09-15T00:00:00", end: "2026-10-05T23:59:59" },
@@ -272,13 +225,10 @@ const kategoriBatches: Record<Exclude<KategoriValue, "">, Batch[]> = {
 }
 
 const PHONE_REGEX = /^[0-9+\s-]{8,}$/
-const URL_REGEX = /^https?:\/\/.+\..+/i
 
 const steps = ["Data Peserta", "Berkas", "Pembayaran"]
 
 // Info rekening pembayaran — dipakai SAMA untuk semua kategori lomba.
-// Logo bank: taruh file gambarnya di public/images/ dengan nama persis di
-// bawah ini (bank-cimb-niaga.png dan bank-seabank.png).
 const BANKS = [
   {
     key: "cimb",
@@ -300,11 +250,10 @@ const RECEIPT_STORAGE_KEY = "auditphoria-last-registration"
 const DRAFT_STORAGE_KEY = "auditphoria-form-draft"
 const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000 // draft basi setelah 24 jam
 
-// Nama field yang dipakai untuk path blob di Vercel Blob (bukan URL Apps
-// Script — file diunggah ke Vercel Blob dulu begitu dipilih, baru dipindah
-// ke Drive lewat Apps Script secara server-ke-server saat submit, supaya
-// tidak kena limit ukuran request 4.5MB milik Vercel Functions maupun isu
-// CORS Apps Script).
+// File diunggah ke Vercel Blob dulu begitu dipilih, baru dipindah ke Drive
+// lewat Apps Script secara server-ke-server saat submit, supaya tidak kena
+// limit ukuran request 4.5MB milik Vercel Functions maupun isu CORS Apps
+// Script.
 async function uploadFileToBlob(field: string, file: File, referenceId: string): Promise<string> {
   const { upload } = await import("@vercel/blob/client")
   const blob = await upload(`pendaftaran/${referenceId}/${field}-${Date.now()}-${file.name}`, file, {
@@ -337,7 +286,6 @@ function makeFileSlot(file: File): FileSlot {
 function sanitizeFilesForDraft(files: FileState): FileState {
   const clean = (list: FileSlot[]) => list.filter((f) => !f.uploading && !!f.url)
   return {
-    karyaFile: files.karyaFile && !files.karyaFile.uploading && files.karyaFile.url ? files.karyaFile : null,
     followIg: clean(files.followIg),
     ktm: clean(files.ktm),
     fotoDiri: clean(files.fotoDiri),
@@ -347,7 +295,6 @@ function sanitizeFilesForDraft(files: FileState): FileState {
 }
 
 function hasPendingUploads(files: FileState) {
-  if (files.karyaFile?.uploading) return true
   return [files.followIg, files.ktm, files.fotoDiri, files.twibbon, files.buktiBayar].some((list) =>
     list.some((f) => f.uploading),
   )
@@ -376,12 +323,10 @@ function loadDraft(kategori: KategoriValue): Draft | null {
     // PENTING: draft lama (dari versi kode sebelumnya, atau localStorage yang
     // korup) bisa punya struktur "files" yang tidak lengkap / bukan array.
     // Kalau langsung dipakai apa adanya, pemanggilan .map()/.filter() di
-    // tempat lain akan crash dengan "Cannot read properties of undefined".
-    // Jadi di sini kita paksa semua field jadi array yang valid — fallback
-    // ke array kosong kalau bentuknya tidak sesuai.
+    // tempat lain akan crash. Jadi di sini kita paksa semua field jadi array
+    // yang valid — fallback ke array kosong kalau bentuknya tidak sesuai.
     const rawFiles = draft.files as Partial<FileState> | undefined
     const safeFiles: FileState = {
-      karyaFile: rawFiles?.karyaFile ?? null,
       followIg: Array.isArray(rawFiles?.followIg) ? rawFiles.followIg : [],
       ktm: Array.isArray(rawFiles?.ktm) ? rawFiles.ktm : [],
       fotoDiri: Array.isArray(rawFiles?.fotoDiri) ? rawFiles.fotoDiri : [],
@@ -536,14 +481,8 @@ function RegistrationFormInner() {
   const formLoadedAt = useRef(Date.now())
   const submittingRef = useRef(false)
 
-  // PERBAIKAN PENTING: hook ini SEBELUMNYA dipanggil setelah beberapa
-  // `if (...) return ...` di bawah — itu melanggar Rules of Hooks React
-  // (hook tidak boleh dipanggil secara kondisional / setelah early return),
-  // dan bisa menyebabkan build/prerender Next.js gagal total sehingga
-  // seluruh domain jadi tidak bisa diakses (bukan sekadar error di dalam
-  // app). Sekarang dipanggil TANPA SYARAT di sini, dengan fallback array
-  // kosong saat kategori belum dipilih — supaya urutan hook selalu sama
-  // di setiap render.
+  // Hook batch status dipanggil TANPA SYARAT di sini (sebelum early return
+  // apa pun) supaya urutan Hooks React selalu konsisten di setiap render.
   const batchStatus = useBatchStatus(kategoriConfig ? kategoriBatches[kategoriConfig.value] : [])
 
   // Pulihkan draft (kalau ada & belum basi) + cek bukti pendaftaran terakhir — HANYA di
@@ -568,13 +507,11 @@ function RegistrationFormInner() {
     if (!activeKategori) return
     const isEmpty =
       !form.ketua.trim() &&
-      !files.karyaFile &&
       files.followIg.length === 0 &&
       files.ktm.length === 0 &&
       files.fotoDiri.length === 0 &&
       files.twibbon.length === 0 &&
-      files.buktiBayar.length === 0 &&
-      !form.karyaLink.trim()
+      files.buktiBayar.length === 0
     if (isEmpty) return
 
     saveDraft(activeKategori, {
@@ -594,39 +531,7 @@ function RegistrationFormInner() {
     setErrors((prev) => ({ ...prev, [key]: "" }))
   }
 
-  function selectKaryaFile(file: File | null) {
-    if (!file || !kategoriConfig) return
-    const isAudio = kategoriConfig.karya === "audio"
-    const maxSize = isAudio ? MAX_AUDIO_SIZE : MAX_FILE_SIZE
-    if (file.size > maxSize) {
-      setErrors((prev) => ({
-        ...prev,
-        karyaFile: `Ukuran file maksimal ${isAudio ? "100MB" : "10MB"} (file Anda ${(file.size / 1024 / 1024).toFixed(1)}MB)`,
-      }))
-      return
-    }
-    setErrors((prev) => ({ ...prev, karyaFile: "" }))
-    const slot = makeFileSlot(file)
-    setFiles((prev) => ({ ...prev, karyaFile: slot }))
-
-    uploadFileToBlob(isAudio ? "karyaAudio" : "karyaFile", file, referenceId)
-      .then((url) => {
-        setFiles((prev) => (prev.karyaFile?.id === slot.id ? { ...prev, karyaFile: { ...slot, uploading: false, url } } : prev))
-      })
-      .catch((err: unknown) => {
-        setFiles((prev) => (prev.karyaFile?.id === slot.id ? { ...prev, karyaFile: null } : prev))
-        setErrors((prev) => ({
-          ...prev,
-          karyaFile: err instanceof Error ? `Gagal unggah: ${err.message}` : "Gagal mengunggah berkas, coba lagi.",
-        }))
-      })
-  }
-
-  function removeKaryaFile() {
-    setFiles((prev) => ({ ...prev, karyaFile: null }))
-  }
-
-  function selectMulti(key: keyof Omit<FileState, "karyaFile">, incoming: File[], maxFiles: number) {
+  function selectMulti(key: keyof FileState, incoming: File[], maxFiles: number) {
     setErrors((prev) => ({ ...prev, [key]: "" }))
 
     const currentCount = files[key].length
@@ -662,7 +567,7 @@ function RegistrationFormInner() {
     })
   }
 
-  function removeMulti(key: keyof Omit<FileState, "karyaFile">, index: number) {
+  function removeMulti(key: keyof FileState, index: number) {
     setFiles((prev) => ({ ...prev, [key]: prev[key].filter((_, i) => i !== index) }))
   }
 
@@ -696,14 +601,6 @@ function RegistrationFormInner() {
   function validateFiles() {
     const next: Record<string, string> = {}
     if (!kategoriConfig) return false
-
-    if (kategoriConfig.karya === "file" || kategoriConfig.karya === "audio" || kategoriConfig.karya === "file+link") {
-      if (!files.karyaFile) next.karyaFile = "Berkas karya wajib diunggah"
-    }
-    if (kategoriConfig.karya === "link" || kategoriConfig.karya === "file+link") {
-      if (!form.karyaLink.trim()) next.karyaLink = "Link karya wajib diisi"
-      else if (!URL_REGEX.test(form.karyaLink.trim())) next.karyaLink = "Format link tidak valid (harus diawali https://)"
-    }
 
     if (files.followIg.length === 0) next.followIg = "Bukti follow Instagram wajib diunggah"
     if (files.ktm.length === 0) next.ktm = "Scan KTM/identitas mahasiswa wajib diunggah"
@@ -753,10 +650,8 @@ function RegistrationFormInner() {
         twibbon: files.twibbon.map((f) => f.url).filter((u): u is string => !!u),
         buktiBayar: files.buktiBayar.map((f) => f.url).filter((u): u is string => !!u),
       }
-      if (files.karyaFile?.url) fileUrls.karyaFile = [files.karyaFile.url]
 
       const fieldLabel: Record<string, string> = {
-        karyaFile: kategoriConfig.karyaFileLabel ?? "Karya",
         followIg: "Bukti Follow IG",
         ktm: "KTM/Identitas",
         fotoDiri: "Foto Diri Anggota",
@@ -764,9 +659,6 @@ function RegistrationFormInner() {
         buktiBayar: "Bukti Pembayaran",
       }
       const requiredFields = ["followIg", "ktm", "fotoDiri", "twibbon", "buktiBayar"]
-      if (kategoriConfig.karya === "file" || kategoriConfig.karya === "audio" || kategoriConfig.karya === "file+link") {
-        requiredFields.push("karyaFile")
-      }
       const missingFields = requiredFields.filter((f) => !fileUrls[f]?.length)
       if (missingFields.length > 0) {
         throw new Error(`Berkas "${missingFields.map((f) => fieldLabel[f] ?? f).join(", ")}" belum terunggah.`)
@@ -786,7 +678,6 @@ function RegistrationFormInner() {
           telepon: form.telepon,
           email: form.email,
           pakta: String(form.pakta),
-          karyaLink: form.karyaLink,
           referenceId,
           website: honeypot,
           formLoadedAt: formLoadedAt.current,
@@ -1126,44 +1017,6 @@ function RegistrationFormInner() {
           {step === 1 && (
             <div className="space-y-8">
               <Section number="2" title="Unggah Berkas" description={`Lomba: ${kategoriConfig.code} — ${kategoriConfig.label}`}>
-                {kategoriConfig.karya !== "none" && (
-                  <div className="space-y-4 rounded-2xl border border-primary/20 bg-primary/5 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-primary">Berkas / Link Karya</p>
-
-                    {(kategoriConfig.karya === "file" ||
-                      kategoriConfig.karya === "audio" ||
-                      kategoriConfig.karya === "file+link") && (
-                      <FileField
-                        label={kategoriConfig.karyaFileLabel ?? "File Karya"}
-                        hint={kategoriConfig.karyaFileHint ?? "Unggah berkas karya"}
-                        accept={kategoriConfig.karyaFileAccept ?? "*"}
-                        icon={kategoriConfig.karya === "audio" ? <Mic className="size-4" /> : <FileText className="size-4" />}
-                        file={files.karyaFile}
-                        onSelect={selectKaryaFile}
-                        onRemove={removeKaryaFile}
-                        error={errors.karyaFile}
-                      />
-                    )}
-
-                    {(kategoriConfig.karya === "link" || kategoriConfig.karya === "file+link") && (
-                      <Field
-                        label={kategoriConfig.karyaLinkLabel ?? "Link Karya"}
-                        required
-                        error={errors.karyaLink}
-                        icon={<Link2 className="size-4" />}
-                      >
-                        <input
-                          type="url"
-                          value={form.karyaLink}
-                          onChange={(e) => update("karyaLink", e.target.value)}
-                          placeholder={kategoriConfig.karyaLinkPlaceholder ?? "https://..."}
-                          className={inputClass(!!errors.karyaLink)}
-                        />
-                      </Field>
-                    )}
-                  </div>
-                )}
-
                 <div className="space-y-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Berkas Umum &middot; maks {MAX_BUKTI} file per berkas
@@ -1492,100 +1345,6 @@ function Stepper({ current }: { current: number }) {
           )
         })}
       </ol>
-    </div>
-  )
-}
-
-function FileField({
-  label,
-  hint,
-  accept,
-  icon,
-  file,
-  onSelect,
-  onRemove,
-  error,
-}: {
-  label: string
-  hint: string
-  accept: string
-  icon: React.ReactNode
-  file: FileSlot | null
-  onSelect: (file: File | null) => void
-  onRemove: () => void
-  error?: string
-}) {
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  return (
-    <div className="space-y-1.5" data-error={!!error}>
-      <label className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-        <span className="text-muted-foreground">{icon}</span>
-        {label}
-        <span className="text-destructive">*</span>
-      </label>
-
-      {file ? (
-        <div
-          className={cn(
-            "flex items-center gap-3 rounded-xl border bg-background px-4 py-3",
-            error ? "border-destructive" : "border-primary/40 bg-primary/5",
-          )}
-        >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            {file.uploading ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <FileText className="size-4" aria-hidden="true" />
-            )}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-foreground">{file.name}</span>
-            <span className="block text-xs text-muted-foreground">
-              {file.uploading ? "Mengunggah…" : `${(file.size / 1024 / 1024).toFixed(1)} MB · tersimpan`}
-            </span>
-          </span>
-          <button
-            type="button"
-            onClick={onRemove}
-            aria-label={`Hapus ${label}`}
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-          >
-            <X className="size-4" aria-hidden="true" />
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className={cn(
-            "flex w-full items-center gap-3 rounded-xl border border-dashed bg-background px-4 py-3 text-left transition-colors",
-            error
-              ? "border-destructive ring-2 ring-destructive/20"
-              : "border-input hover:border-primary/50 hover:bg-secondary/40",
-          )}
-        >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary">
-            <Upload className="size-4" aria-hidden="true" />
-          </span>
-          <span>
-            <span className="block text-sm font-medium text-foreground">Pilih file</span>
-            <span className="block text-xs text-muted-foreground">{hint}</span>
-          </span>
-        </button>
-      )}
-
-      <input
-        ref={inputRef}
-        type="file"
-        accept={accept}
-        className="sr-only"
-        onChange={(e) => {
-          onSelect(e.target.files?.[0] ?? null)
-          e.target.value = ""
-        }}
-      />
-      {error && <p className="text-xs font-medium text-destructive">{error}</p>}
     </div>
   )
 }
