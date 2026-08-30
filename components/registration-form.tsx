@@ -369,9 +369,32 @@ function loadDraft(kategori: KategoriValue): Draft | null {
   try {
     const raw = window.localStorage.getItem(draftKey(kategori))
     if (!raw) return null
-    const draft = JSON.parse(raw) as Draft
+    const draft = JSON.parse(raw) as Partial<Draft>
     if (!draft.savedAt || Date.now() - draft.savedAt > DRAFT_MAX_AGE_MS) return null
-    return draft
+    if (!draft.referenceId || !draft.form) return null
+
+    // PENTING: draft lama (dari versi kode sebelumnya, atau localStorage yang
+    // korup) bisa punya struktur "files" yang tidak lengkap / bukan array.
+    // Kalau langsung dipakai apa adanya, pemanggilan .map()/.filter() di
+    // tempat lain akan crash dengan "Cannot read properties of undefined".
+    // Jadi di sini kita paksa semua field jadi array yang valid — fallback
+    // ke array kosong kalau bentuknya tidak sesuai.
+    const rawFiles = draft.files as Partial<FileState> | undefined
+    const safeFiles: FileState = {
+      karyaFile: rawFiles?.karyaFile ?? null,
+      followIg: Array.isArray(rawFiles?.followIg) ? rawFiles.followIg : [],
+      ktm: Array.isArray(rawFiles?.ktm) ? rawFiles.ktm : [],
+      fotoDiri: Array.isArray(rawFiles?.fotoDiri) ? rawFiles.fotoDiri : [],
+      twibbon: Array.isArray(rawFiles?.twibbon) ? rawFiles.twibbon : [],
+      buktiBayar: Array.isArray(rawFiles?.buktiBayar) ? rawFiles.buktiBayar : [],
+    }
+
+    return {
+      referenceId: draft.referenceId,
+      form: { ...initialForm, ...draft.form },
+      files: safeFiles,
+      savedAt: draft.savedAt,
+    }
   } catch {
     return null
   }
