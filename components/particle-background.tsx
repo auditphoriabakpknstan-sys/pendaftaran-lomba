@@ -14,10 +14,12 @@ type Star = {
 type Meteor = {
   top: string
   left: string
-  width: number
+  dx: number
+  dy: number
+  length: number
+  tailAngle: number
   duration: number
   delay: number
-  angle: number
 }
 
 export function ParticleBackground() {
@@ -35,17 +37,25 @@ export function ParticleBackground() {
     }))
   }, [])
 
-  // Meteor / bintang jatuh — delay panjang & acak biar muncul sesekali,
-  // sudut miring khas "shooting star", beberapa lebih panjang & terang.
+  // Meteor / bintang jatuh — delay panjang & acak biar muncul sesekali.
+  // Arah jatuh dihitung sebagai vektor (dx, dy) miring ke kanan-bawah,
+  // ekor mengarah berlawanan dengan arah gerak biar keliatan "melesat".
   const meteors = useMemo<Meteor[]>(() => {
-    return Array.from({ length: 7 }, (_, i) => ({
-      top: `${Math.random() * 32}%`,
-      left: `${Math.random() * 70}%`,
-      width: Math.random() * 90 + 140,
-      duration: Math.random() * 3 + 5,
-      delay: i * 3.1 + Math.random() * -6,
-      angle: Math.random() * 10 + 28,
-    }))
+    return Array.from({ length: 6 }, (_, i) => {
+      const angleDeg = Math.random() * 12 + 30 // 30–42° dari horizontal, turun ke kanan
+      const angleRad = (angleDeg * Math.PI) / 180
+      const distance = Math.random() * 120 + 260
+      return {
+        top: `${Math.random() * 30}%`,
+        left: `${Math.random() * 65}%`,
+        dx: Math.cos(angleRad) * distance,
+        dy: Math.sin(angleRad) * distance,
+        length: Math.random() * 60 + 110,
+        tailAngle: 180 + angleDeg, // ekor mengarah ke asal (belakang arah gerak)
+        duration: Math.random() * 2.5 + 4.5,
+        delay: i * 3.6 + Math.random() * -6,
+      }
+    })
   }, [])
 
   return (
@@ -88,10 +98,12 @@ export function ParticleBackground() {
             {
               top: meteor.top,
               left: meteor.left,
-              width: meteor.width,
               animationDuration: `${meteor.duration}s`,
               animationDelay: `${meteor.delay}s`,
-              "--meteor-angle": `${meteor.angle}deg`,
+              "--meteor-dx": `${meteor.dx}px`,
+              "--meteor-dy": `${meteor.dy}px`,
+              "--meteor-length": `${meteor.length}px`,
+              "--meteor-tail-angle": `${meteor.tailAngle}deg`,
             } as React.CSSProperties
           }
         />
