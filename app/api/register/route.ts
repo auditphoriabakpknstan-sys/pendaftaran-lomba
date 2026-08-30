@@ -13,12 +13,11 @@ const KATEGORI_LABEL: Record<string, string> = {
   lcca: "LCCA - Lomba Cerdas Cermat Audit",
 }
 
-// CATATAN REVISI: "posterWa" dihapus dari daftar berkas wajib — field ini
-// sudah tidak ada di form pendaftaran (form.tsx), yang tersisa cuma
-// "posterIg" (Bukti Share Poster di IG Story). Kalau tetap diwajibkan di
-// sini, submit akan SELALU gagal karena fileUrls.posterWa memang tidak
-// pernah dikirim dari client.
-const COMMON_FILE_FIELDS = ["followIg", "ktm", "posterIg", "twibbon", "buktiBayar"] as const
+// CATATAN REVISI: "posterWa" dan "posterIg" (bukti share poster di IG
+// story/WA) dihapus dari daftar berkas wajib — tidak tercantum di handbook
+// manapun. Field "fotoDiri" (foto diri masing-masing anggota) ditambahkan
+// sesuai handbook mekanisme pendaftaran.
+const COMMON_FILE_FIELDS = ["followIg", "ktm", "fotoDiri", "twibbon", "buktiBayar"] as const
 
 // PENTING: nama field di sini HARUS sama dengan key yang benar-benar dikirim
 // dari form (lihat fileUrls di handleSubmit pada registration-form.tsx).
@@ -47,7 +46,7 @@ const FILE_LABELS: Record<string, string> = {
   karyaFile: "Berkas Karya",
   followIg: "Bukti Follow IG",
   ktm: "KTM - Identitas",
-  posterIg: "Bukti Share Poster IG",
+  fotoDiri: "Foto Diri Anggota",
   twibbon: "Bukti Upload Twibbon",
   buktiBayar: "Bukti Pembayaran",
 }
