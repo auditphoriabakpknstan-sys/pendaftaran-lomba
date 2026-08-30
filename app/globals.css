@@ -198,3 +198,163 @@
     transform: translateY(-40vh);
   }
 }
+
+/* ==========================================================================
+   Night Sky Background — desert / gurun malam aesthetic
+   Dipakai oleh components/particle-background.tsx
+   ========================================================================== */
+
+.night-sky {
+  background:
+    radial-gradient(ellipse 100% 45% at 50% 100%, rgba(30, 150, 140, 0.30) 0%, rgba(2, 4, 10, 0) 62%),
+    linear-gradient(180deg, #050615 0%, #0a0e28 22%, #0e1a38 42%, #0c2438 62%, #0a3438 82%, #0b3f3c 100%);
+}
+
+/* Lapisan nebula halus supaya langit tidak terasa flat */
+.sky-nebula {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(55% 35% at 75% 12%, rgba(150, 110, 190, 0.12) 0%, rgba(0, 0, 0, 0) 70%),
+    radial-gradient(45% 30% at 15% 22%, rgba(70, 150, 170, 0.10) 0%, rgba(0, 0, 0, 0) 70%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+/* Pita Milky Way miring melintasi langit, khas gambar referensi */
+.milky-way {
+  position: absolute;
+  top: -10%;
+  left: 15%;
+  width: 65%;
+  height: 90%;
+  background: linear-gradient(
+    200deg,
+    rgba(210, 200, 235, 0) 0%,
+    rgba(210, 200, 235, 0.10) 30%,
+    rgba(190, 210, 230, 0.16) 48%,
+    rgba(180, 200, 220, 0.08) 65%,
+    rgba(210, 200, 235, 0) 100%
+  );
+  filter: blur(18px);
+  transform: rotate(-18deg);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+/* Siluet awan tipis melintang, warna gelap dengan tepi kebiruan */
+.cloud-layer {
+  position: absolute;
+  left: -10%;
+  width: 120%;
+  height: 26%;
+  background: radial-gradient(
+    ellipse 60% 100% at 50% 50%,
+    rgba(4, 10, 18, 0.55) 0%,
+    rgba(4, 10, 18, 0.25) 45%,
+    rgba(4, 10, 18, 0) 75%
+  );
+  filter: blur(6px);
+  pointer-events: none;
+}
+.cloud-layer--1 {
+  top: 38%;
+  transform: scaleX(1.1) rotate(-1.5deg);
+  opacity: 0.8;
+}
+.cloud-layer--2 {
+  top: 56%;
+  transform: scaleX(1.3) rotate(1deg);
+  opacity: 0.6;
+}
+
+/* Bintang berkelap-kelip */
+.star-dot {
+  position: absolute;
+  border-radius: 9999px;
+  background: #ffffff;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.6);
+  opacity: var(--star-min-opacity, 0.2);
+  animation-name: star-twinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+@keyframes star-twinkle {
+  from {
+    opacity: var(--star-min-opacity, 0.2);
+    transform: scale(0.85);
+  }
+  to {
+    opacity: var(--star-max-opacity, 0.9);
+    transform: scale(1.15);
+  }
+}
+
+/* Meteor / bintang jatuh */
+.meteor {
+  position: absolute;
+  height: 2px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(180, 220, 255, 0.55) 40%,
+    rgba(180, 220, 255, 0) 100%
+  );
+  transform: rotate(var(--meteor-angle, 30deg));
+  transform-origin: left center;
+  opacity: 0;
+  animation-name: meteor-fall;
+  animation-timing-function: cubic-bezier(0.25, 0.1, 0.25, 1);
+  animation-iteration-count: infinite;
+  filter: drop-shadow(0 0 6px rgba(200, 230, 255, 0.6));
+}
+
+@keyframes meteor-fall {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--meteor-angle, 30deg)) translateX(0);
+  }
+  4% {
+    opacity: 1;
+  }
+  18% {
+    opacity: 1;
+    transform: rotate(var(--meteor-angle, 30deg)) translateX(260px);
+  }
+  26% {
+    opacity: 0;
+    transform: rotate(var(--meteor-angle, 30deg)) translateX(340px);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--meteor-angle, 30deg)) translateX(340px);
+  }
+}
+
+/* Glow di garis horizon, teal kehijauan menyala lebar (khas foto referensi) */
+.horizon-glow {
+  position: absolute;
+  left: 50%;
+  bottom: 10vh;
+  width: 160%;
+  height: 26vh;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    ellipse 60% 100% at 50% 100%,
+    rgba(60, 210, 190, 0.32) 0%,
+    rgba(30, 160, 160, 0.18) 35%,
+    rgba(10, 60, 80, 0.10) 55%,
+    rgba(0, 0, 0, 0) 78%
+  );
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+/* Kilau air di garis paling bawah */
+.water-glint {
+  filter: blur(2px);
+  opacity: 0.9;
+}
