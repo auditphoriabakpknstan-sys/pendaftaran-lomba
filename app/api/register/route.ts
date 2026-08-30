@@ -13,7 +13,12 @@ const KATEGORI_LABEL: Record<string, string> = {
   lcca: "LCCA - Lomba Cerdas Cermat Audit",
 }
 
-const COMMON_FILE_FIELDS = ["followIg", "ktm", "posterWa", "posterIg", "twibbon", "buktiBayar"] as const
+// CATATAN REVISI: "posterWa" dihapus dari daftar berkas wajib — field ini
+// sudah tidak ada di form pendaftaran (form.tsx), yang tersisa cuma
+// "posterIg" (Bukti Share Poster di IG Story). Kalau tetap diwajibkan di
+// sini, submit akan SELALU gagal karena fileUrls.posterWa memang tidak
+// pernah dikirim dari client.
+const COMMON_FILE_FIELDS = ["followIg", "ktm", "posterIg", "twibbon", "buktiBayar"] as const
 
 const KATEGORI_FILE_REQUIREMENTS: Record<string, string[]> = {
   aec: ["abstrak"],
@@ -36,7 +41,6 @@ const FILE_LABELS: Record<string, string> = {
   karyaAudio: "Berkas Audio Voice Over",
   followIg: "Bukti Follow IG",
   ktm: "KTM - Identitas",
-  posterWa: "Bukti Share Poster WA",
   posterIg: "Bukti Share Poster IG",
   twibbon: "Bukti Upload Twibbon",
   buktiBayar: "Bukti Pembayaran",
