@@ -60,6 +60,8 @@ type KategoriConfig = {
   desc: string
   timMode: TimMode
   icon: React.ReactNode
+  /** Khusus AEC: wajib unggah bukti share poster di IG Story. */
+  butuhPosterIg?: boolean
 }
 
 const kategoriList: KategoriConfig[] = [
@@ -70,6 +72,7 @@ const kategoriList: KategoriConfig[] = [
     desc: "Kompetisi menulis esai bertema audit — individu atau tim",
     timMode: "opsional",
     icon: <ScrollText className="size-5" aria-hidden="true" />,
+    butuhPosterIg: true,
   },
   {
     value: "arc",
@@ -173,6 +176,8 @@ type FileState = {
   ktm: FileSlot[]
   fotoDiri: FileSlot[]
   twibbon: FileSlot[]
+  /** Khusus kategori AEC — bukti share poster di IG Story. */
+  posterIg: FileSlot[]
   buktiBayar: FileSlot[]
 }
 
@@ -194,6 +199,7 @@ const initialFiles: FileState = {
   ktm: [],
   fotoDiri: [],
   twibbon: [],
+  posterIg: [],
   buktiBayar: [],
 }
 
@@ -302,12 +308,13 @@ function sanitizeFilesForDraft(files: FileState): FileState {
     ktm: clean(files.ktm),
     fotoDiri: clean(files.fotoDiri),
     twibbon: clean(files.twibbon),
+    posterIg: clean(files.posterIg),
     buktiBayar: clean(files.buktiBayar),
   }
 }
 
 function hasPendingUploads(files: FileState) {
-  return [files.followIg, files.ktm, files.fotoDiri, files.twibbon, files.buktiBayar].some((list) =>
+  return [files.followIg, files.ktm, files.fotoDiri, files.twibbon, files.posterIg, files.buktiBayar].some((list) =>
     list.some((f) => f.uploading),
   )
 }
@@ -343,6 +350,7 @@ function loadDraft(kategori: KategoriValue): Draft | null {
       ktm: Array.isArray(rawFiles?.ktm) ? rawFiles.ktm : [],
       fotoDiri: Array.isArray(rawFiles?.fotoDiri) ? rawFiles.fotoDiri : [],
       twibbon: Array.isArray(rawFiles?.twibbon) ? rawFiles.twibbon : [],
+      posterIg: Array.isArray(rawFiles?.posterIg) ? rawFiles.posterIg : [],
       buktiBayar: Array.isArray(rawFiles?.buktiBayar) ? rawFiles.buktiBayar : [],
     }
 
@@ -545,6 +553,9 @@ function RegistrationFormInner() {
     if (files.ktm.length === 0) next.ktm = "Scan KTM/identitas mahasiswa wajib diunggah"
     if (files.fotoDiri.length === 0) next.fotoDiri = "Foto diri masing-masing anggota wajib diunggah"
     if (files.twibbon.length === 0) next.twibbon = "Bukti upload twibbon wajib diunggah"
+    if (kategoriConfig.butuhPosterIg && files.posterIg.length === 0) {
+      next.posterIg = "Bukti share poster di IG Story wajib diunggah"
+    }
     setErrors(next)
     if (Object.keys(next).length > 0) scrollToError()
     return Object.keys(next).length === 0
@@ -587,6 +598,7 @@ function RegistrationFormInner() {
         ktm: files.ktm.map((f) => f.url).filter((u): u is string => !!u),
         fotoDiri: files.fotoDiri.map((f) => f.url).filter((u): u is string => !!u),
         twibbon: files.twibbon.map((f) => f.url).filter((u): u is string => !!u),
+        posterIg: files.posterIg.map((f) => f.url).filter((u): u is string => !!u),
         buktiBayar: files.buktiBayar.map((f) => f.url).filter((u): u is string => !!u),
       }
 
@@ -595,9 +607,11 @@ function RegistrationFormInner() {
         ktm: "KTM/Identitas",
         fotoDiri: "Foto Diri Anggota",
         twibbon: "Bukti Upload Twibbon",
+        posterIg: "Bukti Share Poster IG Story",
         buktiBayar: "Bukti Pembayaran",
       }
       const requiredFields = ["followIg", "ktm", "fotoDiri", "twibbon", "buktiBayar"]
+      if (kategoriConfig.butuhPosterIg) requiredFields.push("posterIg")
       const missingFields = requiredFields.filter((f) => !fileUrls[f]?.length)
       if (missingFields.length > 0) {
         throw new Error(`Berkas "${missingFields.map((f) => fieldLabel[f] ?? f).join(", ")}" belum terunggah.`)
@@ -975,6 +989,19 @@ function RegistrationFormInner() {
                     error={errors.twibbon}
                     maxFiles={MAX_BUKTI}
                   />
+                  {kategoriConfig.butuhPosterIg && (
+                    <MultiFileField
+                      label="Bukti Upload Poster ke IG Story (khusus AEC)"
+                      hint="Screenshot poster AEC yang telah diunggah ke Instagram Story — JPG / PNG · maks 10MB"
+                      accept="image/png,image/jpeg"
+                      icon={<ImageIcon className="size-4" />}
+                      files={files.posterIg}
+                      onSelect={(f) => selectMulti("posterIg", f, MAX_BUKTI)}
+                      onRemove={(i) => removeMulti("posterIg", i)}
+                      error={errors.posterIg}
+                      maxFiles={MAX_BUKTI}
+                    />
+                  )}
                 </div>
               </Section>
 
