@@ -14,12 +14,13 @@ type Star = {
 type Meteor = {
   top: string
   left: string
-  dx: number
-  dy: number
+  dx: string
+  dy: string
   length: number
   tailAngle: number
   duration: number
   delay: number
+  variant: "sky" | "ground"
 }
 
 export function ParticleBackground() {
@@ -38,23 +39,34 @@ export function ParticleBackground() {
   }, [])
 
   // Meteor / bintang jatuh — delay panjang & acak biar muncul sesekali.
-  // Arah jatuh dihitung sebagai vektor (dx, dy) miring ke kanan-bawah,
-  // ekor mengarah berlawanan dengan arah gerak biar keliatan "melesat".
+  // Sebagian ("ground") sengaja dibuat jaraknya cukup jauh sampai nyaris
+  // menyentuh garis horizon/siluet tanah sebelum fade, sisanya ("sky")
+  // tetap fade di tengah langit seperti sebelumnya — biar variatif.
   const meteors = useMemo<Meteor[]>(() => {
     return Array.from({ length: 6 }, (_, i) => {
-      const angleDeg = Math.random() * 12 + 30 // 30–42° dari horizontal, turun ke kanan
+      const angleDeg = Math.random() * 12 + 30 // 30–42° dari horizontal
       const angleRad = (angleDeg * Math.PI) / 180
-      const distance = Math.random() * 120 + 260
+      const toGround = i % 3 === 0 // sekitar 1 dari 3 meteor jatuh sampai tanah
+      const startTop = Math.random() * 22 // mulai di 0–22% tinggi layar
+
+      // dy dihitung dalam satuan vh, jadi langsung setara persen tinggi
+      // layar yang ditempuh — memudahkan menargetkan dekat siluet tanah.
+      const dyVh = toGround
+        ? Math.random() * 8 + 88 - startTop // nyaris sampai 88–96% tinggi layar
+        : Math.random() * 18 + 22 // fade di tengah langit (22–40vh)
+      const dxVh = dyVh / Math.tan(angleRad)
+
       return {
-        top: `${Math.random() * 30}%`,
-        left: `${Math.random() * 65}%`,
-        dx: Math.cos(angleRad) * distance,
-        dy: Math.sin(angleRad) * distance,
+        top: `${startTop}%`,
+        left: `${Math.random() * (toGround ? 50 : 65)}%`,
+        dx: `${dxVh.toFixed(1)}vh`,
+        dy: `${dyVh.toFixed(1)}vh`,
         length: Math.random() * 60 + 110,
-        tailAngle: 180 + angleDeg, // ekor mengarah ke asal (belakang arah gerak)
-        duration: Math.random() * 2.5 + 4.5,
+        tailAngle: 180 + angleDeg,
+        duration: toGround ? Math.random() * 2 + 6.5 : Math.random() * 2.5 + 4.5,
         delay: i * 3.6 + Math.random() * -6,
-      }
+        variant: toGround ? "ground" : "sky",
+      } satisfies Meteor
     })
   }, [])
 
@@ -93,15 +105,15 @@ export function ParticleBackground() {
       {meteors.map((meteor, i) => (
         <span
           key={`meteor-${i}`}
-          className="meteor"
+          className={`meteor${meteor.variant === "ground" ? " meteor--ground" : ""}`}
           style={
             {
               top: meteor.top,
               left: meteor.left,
               animationDuration: `${meteor.duration}s`,
               animationDelay: `${meteor.delay}s`,
-              "--meteor-dx": `${meteor.dx}px`,
-              "--meteor-dy": `${meteor.dy}px`,
+              "--meteor-dx": meteor.dx,
+              "--meteor-dy": meteor.dy,
               "--meteor-length": `${meteor.length}px`,
               "--meteor-tail-angle": `${meteor.tailAngle}deg`,
             } as React.CSSProperties
