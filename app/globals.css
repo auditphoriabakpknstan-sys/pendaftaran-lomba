@@ -344,15 +344,44 @@
   }
   55% {
     opacity: 1;
-    transform: translate(var(--meteor-dx, 220px), var(--meteor-dy, 260px));
+    transform: translate(var(--meteor-dx, 30vh), var(--meteor-dy, 30vh));
   }
   68% {
     opacity: 0;
-    transform: translate(calc(var(--meteor-dx, 220px) * 1.25), calc(var(--meteor-dy, 260px) * 1.25));
+    transform: translate(calc(var(--meteor-dx, 30vh) * 1.25), calc(var(--meteor-dy, 30vh) * 1.25));
   }
   100% {
     opacity: 0;
-    transform: translate(calc(var(--meteor-dx, 220px) * 1.25), calc(var(--meteor-dy, 260px) * 1.25));
+    transform: translate(calc(var(--meteor-dx, 30vh) * 1.25), calc(var(--meteor-dy, 30vh) * 1.25));
+  }
+}
+
+/* Varian meteor yang melesat sampai nyaris menyentuh garis horizon/siluet
+   tanah — fade baru terjadi di akhir perjalanan (dekat tanah), bukan di
+   tengah langit seperti varian default di atas. */
+.meteor--ground {
+  animation-name: meteor-fall-ground;
+}
+
+@keyframes meteor-fall-ground {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  4% {
+    opacity: 1;
+  }
+  86% {
+    opacity: 1;
+    transform: translate(var(--meteor-dx, 90vh), var(--meteor-dy, 90vh));
+  }
+  97% {
+    opacity: 0;
+    transform: translate(calc(var(--meteor-dx, 90vh) * 1.03), calc(var(--meteor-dy, 90vh) * 1.03));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(var(--meteor-dx, 90vh) * 1.03), calc(var(--meteor-dy, 90vh) * 1.03));
   }
 }
 
