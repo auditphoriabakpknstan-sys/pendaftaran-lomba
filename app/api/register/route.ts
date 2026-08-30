@@ -15,15 +15,26 @@ const KATEGORI_LABEL: Record<string, string> = {
 
 // CATATAN REVISI: Berkas/link karya (upload essay/abstrak, link reels IG,
 // infografis, audio voice over) DIHAPUS TOTAL dari alur pendaftaran ini.
-// Semua kategori sekarang hanya wajib mengunggah 5 berkas umum di bawah —
-// tidak ada lagi requirement tambahan per kategori (karyaFile / karyaLink).
+// Semua kategori wajib mengunggah 5 berkas umum di bawah, DITAMBAH satu
+// berkas tambahan khusus untuk AEC (lihat KATEGORI_EXTRA_FILE_REQUIREMENTS).
 const REQUIRED_FILE_FIELDS = ["followIg", "ktm", "fotoDiri", "twibbon", "buktiBayar"] as const
+
+// Requirement berkas tambahan per kategori — saat ini hanya AEC yang wajib
+// mengunggah bukti share poster di IG Story.
+const KATEGORI_EXTRA_FILE_REQUIREMENTS: Record<string, string[]> = {
+  aec: ["posterIg"],
+  arc: [],
+  aice: [],
+  avoc: [],
+  lcca: [],
+}
 
 const FILE_LABELS: Record<string, string> = {
   followIg: "Bukti Follow IG",
   ktm: "KTM - Identitas",
   fotoDiri: "Foto Diri Anggota",
   twibbon: "Bukti Upload Twibbon",
+  posterIg: "Bukti Share Poster IG Story",
   buktiBayar: "Bukti Pembayaran",
 }
 
@@ -109,7 +120,8 @@ export async function POST(req: Request) {
       )
     }
 
-    for (const field of REQUIRED_FILE_FIELDS) {
+    const requiredFileFields = [...REQUIRED_FILE_FIELDS, ...(KATEGORI_EXTRA_FILE_REQUIREMENTS[data.kategori] ?? [])]
+    for (const field of requiredFileFields) {
       const urls = data.fileUrls[field]
       if (!urls || urls.length === 0) {
         return NextResponse.json(
