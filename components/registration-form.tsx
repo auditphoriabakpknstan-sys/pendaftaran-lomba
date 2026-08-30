@@ -29,7 +29,6 @@ import {
   Upload,
   ArrowRight,
   ArrowLeft,
-  Wallet,
   Copy,
   Check,
   X,
@@ -269,11 +268,25 @@ const URL_REGEX = /^https?:\/\/.+\..+/i
 
 const steps = ["Data Peserta", "Berkas", "Pembayaran"]
 
-const BANK = {
-  bank: "Bank BNI",
-  norek: "1234567890",
-  atasNama: "Panitia Auditphoria 6.0",
-}
+// Info rekening pembayaran — dipakai SAMA untuk semua kategori lomba.
+// Logo bank: taruh file gambarnya di public/images/ dengan nama persis di
+// bawah ini (bank-cimb-niaga.png dan bank-seabank.png).
+const BANKS = [
+  {
+    key: "cimb",
+    bank: "CIMB Niaga",
+    norek: "707050694500",
+    atasNama: "Shania Jeanine",
+    logo: "/images/bank-cimb-niaga.png",
+  },
+  {
+    key: "seabank",
+    bank: "SeaBank",
+    norek: "901475519477",
+    atasNama: "Shania Jeanine",
+    logo: "/images/bank-seabank.png",
+  },
+] as const
 
 const RECEIPT_STORAGE_KEY = "auditphoria-last-registration"
 const DRAFT_STORAGE_KEY = "auditphoria-form-draft"
@@ -485,7 +498,7 @@ function RegistrationFormInner() {
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
-  const [copied, setCopied] = useState(false)
+  const [copiedBank, setCopiedBank] = useState<string | null>(null)
   const [referenceId, setReferenceId] = useState<string>(() => generateReferenceId(kategoriConfig?.code || "AUD6"))
   const [honeypot, setHoneypot] = useState("")
   const [lastReceipt, setLastReceipt] = useState<ReceiptData | null>(null)
@@ -780,11 +793,11 @@ function RegistrationFormInner() {
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  async function copyNorek() {
+  async function copyNorek(key: string, norek: string) {
     try {
-      await navigator.clipboard.writeText(BANK.norek)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      await navigator.clipboard.writeText(norek)
+      setCopiedBank(key)
+      setTimeout(() => setCopiedBank(null), 2000)
     } catch {
       // abaikan
     }
@@ -1196,54 +1209,48 @@ function RegistrationFormInner() {
             <div className="space-y-8">
               <Section number="3" title="Pembayaran" description="Lakukan pembayaran lalu unggah bukti transfer">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  {/* QRIS */}
-                  <div className="flex flex-col items-center rounded-2xl border border-border bg-card p-5 text-center">
-                    <span className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-secondary-foreground">
-                      <Wallet className="size-3.5" aria-hidden="true" />
-                      Scan QRIS
-                    </span>
-                    <div className="overflow-hidden rounded-xl border border-border bg-background p-2">
-                      <Image
-                        src="/images/qris-pembayaran.png"
-                        alt="Kode QRIS untuk pembayaran biaya pendaftaran"
-                        width={200}
-                        height={200}
-                        className="size-40 object-contain"
-                      />
+                  {BANKS.map((b) => (
+                    <div key={b.key} className="flex flex-col justify-center rounded-2xl border border-border bg-card p-5">
+                      <div className="mb-3 flex items-center gap-3">
+                        <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-background p-1.5">
+                          <Image
+                            src={b.logo}
+                            alt={`Logo ${b.bank}`}
+                            width={40}
+                            height={40}
+                            className="size-full object-contain"
+                          />
+                        </div>
+                        <p className="font-heading text-lg font-bold text-foreground">{b.bank}</p>
+                      </div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Nomor Rekening
+                      </p>
+                      <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-secondary/60 px-3 py-2">
+                        <span className="font-mono text-base font-semibold tracking-wide text-foreground">
+                          {b.norek}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyNorek(b.key, b.norek)}
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                        >
+                          {copiedBank === b.key ? (
+                            <>
+                              <Check className="size-3.5" aria-hidden="true" /> Tersalin
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="size-3.5" aria-hidden="true" /> Salin
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        a.n. <span className="font-medium text-foreground">{b.atasNama}</span>
+                      </p>
                     </div>
-                    <p className="mt-3 text-xs text-muted-foreground">Mendukung semua e-wallet &amp; m-banking</p>
-                  </div>
-
-                  {/* Transfer Bank */}
-                  <div className="flex flex-col justify-center rounded-2xl border border-border bg-card p-5">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Transfer Bank
-                    </p>
-                    <p className="mt-2 font-heading text-lg font-bold text-foreground">{BANK.bank}</p>
-                    <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-secondary/60 px-3 py-2">
-                      <span className="font-mono text-base font-semibold tracking-wide text-foreground">
-                        {BANK.norek}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={copyNorek}
-                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-                      >
-                        {copied ? (
-                          <>
-                            <Check className="size-3.5" aria-hidden="true" /> Tersalin
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="size-3.5" aria-hidden="true" /> Salin
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      a.n. <span className="font-medium text-foreground">{BANK.atasNama}</span>
-                    </p>
-                  </div>
+                  ))}
                 </div>
 
                 <MultiFileField
