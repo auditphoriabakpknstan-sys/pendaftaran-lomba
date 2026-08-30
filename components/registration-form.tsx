@@ -513,6 +513,16 @@ function RegistrationFormInner() {
   const formLoadedAt = useRef(Date.now())
   const submittingRef = useRef(false)
 
+  // PERBAIKAN PENTING: hook ini SEBELUMNYA dipanggil setelah beberapa
+  // `if (...) return ...` di bawah — itu melanggar Rules of Hooks React
+  // (hook tidak boleh dipanggil secara kondisional / setelah early return),
+  // dan bisa menyebabkan build/prerender Next.js gagal total sehingga
+  // seluruh domain jadi tidak bisa diakses (bukan sekadar error di dalam
+  // app). Sekarang dipanggil TANPA SYARAT di sini, dengan fallback array
+  // kosong saat kategori belum dipilih — supaya urutan hook selalu sama
+  // di setiap render.
+  const batchStatus = useBatchStatus(kategoriConfig ? kategoriBatches[kategoriConfig.value] : [])
+
   // Pulihkan draft (kalau ada & belum basi) + cek bukti pendaftaran terakhir — HANYA di
   // client, supaya tidak bentrok dengan hasil render server (hydration).
   useEffect(() => {
@@ -821,8 +831,6 @@ function RegistrationFormInner() {
       />
     )
   }
-
-  const batchStatus = useBatchStatus(kategoriBatches[kategoriConfig.value])
 
   if (batchStatus.state === "closed") {
     return <PendaftaranDitutup kategoriConfig={kategoriConfig} />
@@ -1393,6 +1401,12 @@ type BatchStatus =
  * Cek batch mana (kalau ada) yang sedang aktif untuk waktu sekarang, update
  * tiap detik. Kalau tidak sedang di batch manapun tapi masih ada batch yang
  * akan datang -> "upcoming". Kalau semua batch sudah lewat -> "closed".
+ *
+ * PENTING: hook ini (dan hook di dalamnya, useState/useEffect) HARUS selalu
+ * dipanggil di komponen pemanggil secara tanpa syarat / tidak boleh berada
+ * setelah early return apa pun. Kalau perlu dipakai dengan kondisi "belum
+ * ada kategori", kirim array batch kosong ([]) — bukan skip pemanggilan
+ * hook-nya.
  */
 function useBatchStatus(batches: Batch[]): BatchStatus {
   const [now, setNow] = useState(() => Date.now())
