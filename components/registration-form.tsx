@@ -830,7 +830,7 @@ function RegistrationFormInner() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 md:py-16">
       {draftRestored && step === 0 && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-card/95 p-4 shadow-lg shadow-black/20 backdrop-blur-sm">
           <p className="text-sm text-foreground">
             Progres pengisian sebelumnya untuk lomba ini berhasil dipulihkan, termasuk berkas yang sudah selesai
             diunggah.
@@ -846,7 +846,7 @@ function RegistrationFormInner() {
         </div>
       )}
       {step === 0 && lastReceipt && (
-        <div className="mb-4 flex flex-col items-start gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-4 flex flex-col items-start gap-3 rounded-2xl border border-primary/30 bg-card/95 p-4 shadow-lg shadow-black/20 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-foreground">
             Anda pernah mendaftar sebelumnya dengan No. Referensi{" "}
             <span className="font-mono font-semibold">{lastReceipt.referenceId}</span>. Belum sempat menyimpan
