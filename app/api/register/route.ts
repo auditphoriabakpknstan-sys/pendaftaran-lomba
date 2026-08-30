@@ -20,11 +20,18 @@ const KATEGORI_LABEL: Record<string, string> = {
 // pernah dikirim dari client.
 const COMMON_FILE_FIELDS = ["followIg", "ktm", "posterIg", "twibbon", "buktiBayar"] as const
 
+// PENTING: nama field di sini HARUS sama dengan key yang benar-benar dikirim
+// dari form (lihat fileUrls di handleSubmit pada registration-form.tsx).
+// Form selalu mengirim berkas karya dengan key "karyaFile", apa pun jenis
+// lombanya (termasuk audio) — nama "karyaAudio"/"abstrak" cuma dipakai untuk
+// penamaan path di Vercel Blob, BUKAN key yang dikirim ke /api/register.
+// Kalau nama di sini tidak cocok, validasi akan SELALU gagal walau berkas
+// sudah diunggah.
 const KATEGORI_FILE_REQUIREMENTS: Record<string, string[]> = {
-  aec: ["abstrak"],
+  aec: [], // revisi: unggah berkas karya AEC dipindah ke link/form terpisah, bukan bagian dari pendaftaran ini
   arc: [],
-  aice: ["abstrak"],
-  avoc: ["karyaAudio"],
+  aice: ["karyaFile"],
+  avoc: ["karyaFile"],
   lcca: [],
 }
 
@@ -37,8 +44,7 @@ const KATEGORI_BUTUH_LINK: Record<string, boolean> = {
 }
 
 const FILE_LABELS: Record<string, string> = {
-  abstrak: "Berkas Karya",
-  karyaAudio: "Berkas Audio Voice Over",
+  karyaFile: "Berkas Karya",
   followIg: "Bukti Follow IG",
   ktm: "KTM - Identitas",
   posterIg: "Bukti Share Poster IG",
