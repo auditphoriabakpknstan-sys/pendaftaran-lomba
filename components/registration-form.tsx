@@ -191,7 +191,7 @@ type FileState = {
   karyaFile: FileSlot | null
   followIg: FileSlot[]
   ktm: FileSlot[]
-  posterIg: FileSlot[]
+  fotoDiri: FileSlot[]
   twibbon: FileSlot[]
   buktiBayar: FileSlot[]
 }
@@ -214,7 +214,7 @@ const initialFiles: FileState = {
   karyaFile: null,
   followIg: [],
   ktm: [],
-  posterIg: [],
+  fotoDiri: [],
   twibbon: [],
   buktiBayar: [],
 }
@@ -245,23 +245,30 @@ const kategoriBatches: Record<Exclude<KategoriValue, "">, Batch[]> = {
     { label: "Batch 2", start: "2026-09-15T00:00:00", end: "2026-10-05T23:59:59" },
     { label: "Batch 3", start: "2026-10-06T00:00:00", end: "2026-10-19T23:59:59" },
   ],
+  // REVISI: Batch 1 SEMUA kategori sekarang dibuka mulai hari ini (bukan
+  // 1 September) — bukan cuma AEC. Batch 2 & 3 tetap sesuai jadwal resmi.
   lcca: [
-    { label: "Batch 1", start: "2026-09-01T00:00:00", end: "2026-09-14T23:59:59" },
+    { label: "Batch 1", start: "2026-08-30T00:00:00", end: "2026-09-14T23:59:59" },
     { label: "Batch 2", start: "2026-09-15T00:00:00", end: "2026-10-05T23:59:59" },
     { label: "Batch 3", start: "2026-10-06T00:00:00", end: "2026-10-19T23:59:59" },
   ],
   aice: [
-    { label: "Batch 1", start: "2026-09-01T00:00:00", end: "2026-09-14T23:59:59" },
+    { label: "Batch 1", start: "2026-08-30T00:00:00", end: "2026-09-14T23:59:59" },
     { label: "Batch 2", start: "2026-09-15T00:00:00", end: "2026-10-05T23:59:59" },
     { label: "Batch 3", start: "2026-10-06T00:00:00", end: "2026-10-19T23:59:59" },
   ],
   // ARC cuma 2 batch, dan batch 2-nya lebih panjang (sampai 12 Oktober, bukan 5 Oktober)
   arc: [
-    { label: "Batch 1", start: "2026-09-01T00:00:00", end: "2026-09-14T23:59:59" },
+    { label: "Batch 1", start: "2026-08-30T00:00:00", end: "2026-09-14T23:59:59" },
     { label: "Batch 2", start: "2026-09-15T00:00:00", end: "2026-10-12T23:59:59" },
   ],
-  // Belum ada jadwal batch spesifik untuk AVOC — placeholder, GANTI sesuai kebutuhan.
-  avoc: [{ label: "Batch 1", start: "2026-09-01T00:00:00", end: "2026-09-15T23:59:59" }],
+  // REVISI: AVOC sebelumnya cuma placeholder 1 batch — sekarang mengikuti
+  // pola 3 batch yang sama seperti LCCA/AICE.
+  avoc: [
+    { label: "Batch 1", start: "2026-08-30T00:00:00", end: "2026-09-14T23:59:59" },
+    { label: "Batch 2", start: "2026-09-15T00:00:00", end: "2026-10-05T23:59:59" },
+    { label: "Batch 3", start: "2026-10-06T00:00:00", end: "2026-10-19T23:59:59" },
+  ],
 }
 
 const PHONE_REGEX = /^[0-9+\s-]{8,}$/
@@ -333,7 +340,7 @@ function sanitizeFilesForDraft(files: FileState): FileState {
     karyaFile: files.karyaFile && !files.karyaFile.uploading && files.karyaFile.url ? files.karyaFile : null,
     followIg: clean(files.followIg),
     ktm: clean(files.ktm),
-    posterIg: clean(files.posterIg),
+    fotoDiri: clean(files.fotoDiri),
     twibbon: clean(files.twibbon),
     buktiBayar: clean(files.buktiBayar),
   }
@@ -341,7 +348,7 @@ function sanitizeFilesForDraft(files: FileState): FileState {
 
 function hasPendingUploads(files: FileState) {
   if (files.karyaFile?.uploading) return true
-  return [files.followIg, files.ktm, files.posterIg, files.twibbon, files.buktiBayar].some((list) =>
+  return [files.followIg, files.ktm, files.fotoDiri, files.twibbon, files.buktiBayar].some((list) =>
     list.some((f) => f.uploading),
   )
 }
@@ -531,7 +538,7 @@ function RegistrationFormInner() {
       !files.karyaFile &&
       files.followIg.length === 0 &&
       files.ktm.length === 0 &&
-      files.posterIg.length === 0 &&
+      files.fotoDiri.length === 0 &&
       files.twibbon.length === 0 &&
       files.buktiBayar.length === 0 &&
       !form.karyaLink.trim()
@@ -667,7 +674,7 @@ function RegistrationFormInner() {
 
     if (files.followIg.length === 0) next.followIg = "Bukti follow Instagram wajib diunggah"
     if (files.ktm.length === 0) next.ktm = "Scan KTM/identitas mahasiswa wajib diunggah"
-    if (files.posterIg.length === 0) next.posterIg = "Bukti share poster di IG story wajib diunggah"
+    if (files.fotoDiri.length === 0) next.fotoDiri = "Foto diri masing-masing anggota wajib diunggah"
     if (files.twibbon.length === 0) next.twibbon = "Bukti upload twibbon wajib diunggah"
     setErrors(next)
     if (Object.keys(next).length > 0) scrollToError()
@@ -709,7 +716,7 @@ function RegistrationFormInner() {
       const fileUrls: Record<string, string[]> = {
         followIg: files.followIg.map((f) => f.url).filter((u): u is string => !!u),
         ktm: files.ktm.map((f) => f.url).filter((u): u is string => !!u),
-        posterIg: files.posterIg.map((f) => f.url).filter((u): u is string => !!u),
+        fotoDiri: files.fotoDiri.map((f) => f.url).filter((u): u is string => !!u),
         twibbon: files.twibbon.map((f) => f.url).filter((u): u is string => !!u),
         buktiBayar: files.buktiBayar.map((f) => f.url).filter((u): u is string => !!u),
       }
@@ -719,11 +726,11 @@ function RegistrationFormInner() {
         karyaFile: kategoriConfig.karyaFileLabel ?? "Karya",
         followIg: "Bukti Follow IG",
         ktm: "KTM/Identitas",
-        posterIg: "Bukti Share Poster IG",
+        fotoDiri: "Foto Diri Anggota",
         twibbon: "Bukti Upload Twibbon",
         buktiBayar: "Bukti Pembayaran",
       }
-      const requiredFields = ["followIg", "ktm", "posterIg", "twibbon", "buktiBayar"]
+      const requiredFields = ["followIg", "ktm", "fotoDiri", "twibbon", "buktiBayar"]
       if (kategoriConfig.karya === "file" || kategoriConfig.karya === "audio" || kategoriConfig.karya === "file+link") {
         requiredFields.push("karyaFile")
       }
@@ -1132,7 +1139,7 @@ function RegistrationFormInner() {
                   </p>
                   <MultiFileField
                     label="Bukti Follow Instagram"
-                    hint="Bukti follow akun instagram auditphoria 6.0 — Screenshot JPG / PNG · maks 10MB"
+                    hint="Bukti follow akun Instagram @auditphoria6.0 dan @bakpknstan — Screenshot JPG / PNG · maks 10MB"
                     accept="image/png,image/jpeg"
                     icon={<AtSign className="size-4" />}
                     files={files.followIg}
@@ -1142,8 +1149,8 @@ function RegistrationFormInner() {
                     maxFiles={MAX_BUKTI}
                   />
                   <MultiFileField
-                    label="Scan KTM / Identitas Mahasiswa"
-                    hint="Kartu Tanda Mahasiswa — JPG / PNG / PDF · maks 10MB"
+                    label="Scan KTM / Surat Keterangan Mahasiswa Aktif"
+                    hint="Kartu Tanda Mahasiswa atau surat keterangan mahasiswa aktif dari perguruan tinggi — JPG / PNG / PDF · maks 10MB"
                     accept="image/png,image/jpeg,.pdf"
                     icon={<IdCard className="size-4" />}
                     files={files.ktm}
@@ -1153,14 +1160,14 @@ function RegistrationFormInner() {
                     maxFiles={MAX_BUKTI}
                   />
                   <MultiFileField
-                    label="Bukti Share Poster di IG Story"
-                    hint="Screenshot poster di Instagram story — JPG / PNG · maks 10MB"
-                    accept="image/png,image/jpeg"
-                    icon={<Share2 className="size-4" />}
-                    files={files.posterIg}
-                    onSelect={(f) => selectMulti("posterIg", f, MAX_BUKTI)}
-                    onRemove={(i) => removeMulti("posterIg", i)}
-                    error={errors.posterIg}
+                    label="Foto Diri Masing-Masing Anggota"
+                    hint="Upload foto diri tiap anggota tim (satu file per anggota) — JPG / PNG / PDF · maks 10MB"
+                    accept="image/png,image/jpeg,.pdf"
+                    icon={<UserRound className="size-4" />}
+                    files={files.fotoDiri}
+                    onSelect={(f) => selectMulti("fotoDiri", f, MAX_BUKTI)}
+                    onRemove={(i) => removeMulti("fotoDiri", i)}
+                    error={errors.fotoDiri}
                     maxFiles={MAX_BUKTI}
                   />
                   <MultiFileField
