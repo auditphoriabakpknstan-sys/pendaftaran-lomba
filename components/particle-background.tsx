@@ -1,55 +1,130 @@
 "use client"
-
 import { useMemo } from "react"
 
-type Dot = {
+type Star = {
+  top: string
   left: string
   size: number
   duration: number
   delay: number
-  color: "primary" | "accent"
-  opacity: number
+  minOpacity: number
+  maxOpacity: number
+}
+
+type Meteor = {
+  top: string
+  left: string
+  width: number
+  duration: number
+  delay: number
+  angle: number
 }
 
 export function ParticleBackground() {
-  const dots = useMemo<Dot[]>(() => {
-    return Array.from({ length: 40 }, (_, i) => ({
+  // Bintang kecil berkelap-kelip, disebar di 72% area atas (sisa dibiarkan
+  // lebih "bersih" untuk area glow horizon + siluet lanskap gurun).
+  const stars = useMemo<Star[]>(() => {
+    return Array.from({ length: 160 }, () => ({
+      top: `${Math.random() * 72}%`,
       left: `${Math.random() * 100}%`,
-      size: Math.random() * 10 + 6,
-      duration: Math.random() * 10 + 10,
-      delay: Math.random() * -20,
-      color: i % 3 === 0 ? "accent" : "primary",
-      opacity: Math.random() * 0.35 + 0.35,
+      size: Math.random() * 2 + 1,
+      duration: Math.random() * 3 + 2.5,
+      delay: Math.random() * -6,
+      minOpacity: Math.random() * 0.2 + 0.1,
+      maxOpacity: Math.random() * 0.35 + 0.65,
+    }))
+  }, [])
+
+  // Meteor / bintang jatuh — delay panjang & acak biar muncul sesekali,
+  // sudut miring khas "shooting star", beberapa lebih panjang & terang.
+  const meteors = useMemo<Meteor[]>(() => {
+    return Array.from({ length: 7 }, (_, i) => ({
+      top: `${Math.random() * 32}%`,
+      left: `${Math.random() * 70}%`,
+      width: Math.random() * 90 + 140,
+      duration: Math.random() * 3 + 5,
+      delay: i * 3.1 + Math.random() * -6,
+      angle: Math.random() * 10 + 28,
     }))
   }, [])
 
   return (
     <div
       aria-hidden="true"
-      // Sebelumnya "-z-10" — z-index NEGATIF di sini yang bikin animasi tidak
-      // pernah kelihatan: <body> di globals.css punya bg-background tapi
-      // position-nya "static" (default), jadi background body itu digambar
-      // SETELAH (menutupi) elemen ber-z-index negatif di dalamnya. Dengan
-      // z-0, elemen ini tetap di belakang konten form (karena dirender lebih
-      // dulu di JSX & konten form biasanya z-auto/positioned di atasnya),
-      // tapi tidak lagi ketutupan background body.
-      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+      className="night-sky pointer-events-none fixed inset-0 z-0 overflow-hidden"
     >
-      {dots.map((dot, i) => (
+      {/* Pita Milky Way miring + lapisan nebula halus */}
+      <div className="sky-nebula" />
+      <div className="milky-way" />
+
+      {/* Siluet awan tipis melintang di tengah langit */}
+      <div className="cloud-layer cloud-layer--1" />
+      <div className="cloud-layer cloud-layer--2" />
+
+      {stars.map((star, i) => (
         <span
-          key={i}
-          className="particle-dot"
-          style={{
-            left: dot.left,
-            width: dot.size,
-            height: dot.size,
-            backgroundColor: dot.color === "primary" ? "var(--primary)" : "var(--accent)",
-            opacity: dot.opacity,
-            animationDuration: `${dot.duration}s`,
-            animationDelay: `${dot.delay}s`,
-          }}
+          key={`star-${i}`}
+          className="star-dot"
+          style={
+            {
+              top: star.top,
+              left: star.left,
+              width: star.size,
+              height: star.size,
+              animationDuration: `${star.duration}s`,
+              animationDelay: `${star.delay}s`,
+              "--star-min-opacity": star.minOpacity,
+              "--star-max-opacity": star.maxOpacity,
+            } as React.CSSProperties
+          }
         />
       ))}
+
+      {meteors.map((meteor, i) => (
+        <span
+          key={`meteor-${i}`}
+          className="meteor"
+          style={
+            {
+              top: meteor.top,
+              left: meteor.left,
+              width: meteor.width,
+              animationDuration: `${meteor.duration}s`,
+              animationDelay: `${meteor.delay}s`,
+              "--meteor-angle": `${meteor.angle}deg`,
+            } as React.CSSProperties
+          }
+        />
+      ))}
+
+      {/* Glow kehijauan/teal di garis horizon */}
+      <div className="horizon-glow" aria-hidden="true" />
+
+      {/* Siluet dune / bukit pasir di bagian paling bawah layar */}
+      <svg
+        className="absolute inset-x-0 bottom-0 w-full"
+        viewBox="0 0 1440 160"
+        preserveAspectRatio="none"
+        style={{ height: "18vh" }}
+        aria-hidden="true"
+      >
+        <path
+          d="M0,130 L100,115 L220,138 L340,100 L460,132 L580,92 L700,124 L820,102 L940,134 L1060,96 L1180,126 L1300,106 L1440,120 L1440,160 L0,160 Z"
+          fill="#010305"
+        />
+      </svg>
+
+      {/* Kilau lembut di garis air, meniru pantulan cahaya di gambar referensi */}
+      <svg
+        className="absolute inset-x-0 bottom-0 w-full water-glint"
+        viewBox="0 0 1440 40"
+        preserveAspectRatio="none"
+        style={{ height: "5vh" }}
+        aria-hidden="true"
+      >
+        <ellipse cx="420" cy="20" rx="90" ry="6" fill="rgba(120,220,210,0.35)" />
+        <ellipse cx="980" cy="18" rx="60" ry="5" fill="rgba(150,230,255,0.25)" />
+      </svg>
     </div>
   )
 }
