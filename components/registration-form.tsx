@@ -237,8 +237,11 @@ const MAX_AUDIO_SIZE = 100 * 1024 * 1024 // 100MB — khusus AVOC
 type Batch = { label: string; start: string; end: string }
 
 const kategoriBatches: Record<Exclude<KategoriValue, "">, Batch[]> = {
+  // KHUSUS AEC — Batch 1 sengaja dimajukan mulai dari hari ini (bukan
+  // 1 September) supaya bisa langsung dites tanpa nunggu. Batch 2 & 3 tetap
+  // sesuai jadwal resmi.
   aec: [
-    { label: "Batch 1", start: "2026-09-01T00:00:00", end: "2026-09-14T23:59:59" },
+    { label: "Batch 1", start: "2026-08-30T00:00:00", end: "2026-09-14T23:59:59" },
     { label: "Batch 2", start: "2026-09-15T00:00:00", end: "2026-10-05T23:59:59" },
     { label: "Batch 3", start: "2026-10-06T00:00:00", end: "2026-10-19T23:59:59" },
   ],
