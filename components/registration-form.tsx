@@ -32,7 +32,6 @@ import {
   X,
   Plus,
   Clock,
-  Download,
   Loader2,
   ExternalLink,
 } from "lucide-react"
@@ -260,7 +259,6 @@ const BANKS = [
   },
 ] as const
 
-const RECEIPT_STORAGE_KEY = "auditphoria-last-registration"
 const DRAFT_STORAGE_KEY = "auditphoria-form-draft"
 const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000 // draft basi setelah 24 jam
 
@@ -377,76 +375,6 @@ function clearDraft(kategori: KategoriValue) {
   }
 }
 
-type ReceiptData = {
-  referenceId: string
-  kategoriLabel: string
-  namaTim: string
-  ketua: string
-  sekolah: string
-  email: string
-  telepon: string
-  savedAt: string
-}
-
-function saveReceiptToStorage(referenceId: string, form: FormState, kategoriLabel: string) {
-  if (typeof window === "undefined") return
-  try {
-    const receipt: ReceiptData = {
-      referenceId,
-      kategoriLabel,
-      namaTim: form.namaTim,
-      ketua: form.ketua,
-      sekolah: form.sekolah,
-      email: form.email,
-      telepon: form.telepon,
-      savedAt: new Date().toISOString(),
-    }
-    window.localStorage.setItem(RECEIPT_STORAGE_KEY, JSON.stringify(receipt))
-  } catch {
-    // abaikan
-  }
-}
-
-function loadReceiptFromStorage(): ReceiptData | null {
-  if (typeof window === "undefined") return null
-  try {
-    const raw = window.localStorage.getItem(RECEIPT_STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as ReceiptData) : null
-  } catch {
-    return null
-  }
-}
-
-function downloadReceiptFile(receipt: ReceiptData) {
-  const lines = [
-    "==============================================",
-    "  BUKTI PENDAFTARAN — AUDITPHORIA 6.0",
-    "==============================================",
-    "",
-    `Cabang Lomba     : ${receipt.kategoriLabel}`,
-    `Nama Tim/Peserta : ${receipt.namaTim || "-"}`,
-    `Nama Ketua       : ${receipt.ketua}`,
-    `Asal Institusi   : ${receipt.sekolah}`,
-    `Email            : ${receipt.email}`,
-    `No. Telepon      : ${receipt.telepon}`,
-    `Waktu Daftar     : ${new Date(receipt.savedAt).toLocaleString("id-ID", { dateStyle: "full", timeStyle: "short" })}`,
-    "",
-    "Simpan bukti ini sebagai referensi. Jika ada",
-    "pertanyaan, sertakan data di atas saat",
-    "menghubungi panitia.",
-    "==============================================",
-  ]
-  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = `bukti-pendaftaran-${receipt.referenceId}.txt`
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
-}
-
 /**
  * Wrapper luar: baca parameter URL (?kategori=aec dst) di dalam Suspense,
  * seperti disyaratkan Next.js untuk useSearchParams pada Client Component.
@@ -489,7 +417,6 @@ function RegistrationFormInner() {
   const [copiedBank, setCopiedBank] = useState<string | null>(null)
   const [referenceId, setReferenceId] = useState<string>(() => generateReferenceId(kategoriConfig?.code || "AUD6"))
   const [honeypot, setHoneypot] = useState("")
-  const [lastReceipt, setLastReceipt] = useState<ReceiptData | null>(null)
   const [draftRestored, setDraftRestored] = useState(false)
   const formLoadedAt = useRef(Date.now())
   const submittingRef = useRef(false)
@@ -498,8 +425,8 @@ function RegistrationFormInner() {
   // apa pun) supaya urutan Hooks React selalu konsisten di setiap render.
   const batchStatus = useBatchStatus(kategoriConfig ? kategoriBatches[kategoriConfig.value] : [])
 
-  // Pulihkan draft (kalau ada & belum basi) + cek bukti pendaftaran terakhir — HANYA di
-  // client, supaya tidak bentrok dengan hasil render server (hydration).
+  // Pulihkan draft (kalau ada & belum basi) — HANYA di client, supaya tidak
+  // bentrok dengan hasil render server (hydration).
   useEffect(() => {
     if (!activeKategori) return
     const draft = loadDraft(activeKategori)
@@ -511,7 +438,6 @@ function RegistrationFormInner() {
     } else {
       setForm((prev) => ({ ...prev, kategori: activeKategori }))
     }
-    setLastReceipt(loadReceiptFromStorage())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKategori])
 
@@ -706,7 +632,6 @@ function RegistrationFormInner() {
         return
       }
 
-      saveReceiptToStorage(referenceId, form, kategoriConfig.label)
       clearDraft(activeKategori)
       setSubmitted(true)
       window.scrollTo({ top: 0, behavior: "smooth" })
@@ -754,7 +679,6 @@ function RegistrationFormInner() {
         form={form}
         kategoriConfig={kategoriConfig}
         onReset={reset}
-        referenceId={referenceId}
       />
     )
   }
@@ -785,31 +709,6 @@ function RegistrationFormInner() {
           >
             <X className="size-3.5" aria-hidden="true" />
           </button>
-        </div>
-      )}
-      {step === 0 && lastReceipt && (
-        <div className="mb-4 flex flex-col items-start gap-3 rounded-2xl border border-primary/30 bg-card/95 p-4 shadow-lg shadow-black/20 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-foreground">
-            Anda pernah mendaftar sebelumnya untuk kategori ini. Belum sempat menyimpan buktinya?
-          </p>
-          <div className="flex shrink-0 gap-2">
-            <button
-              type="button"
-              onClick={() => downloadReceiptFile(lastReceipt)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:brightness-110"
-            >
-              <Download className="size-3.5" aria-hidden="true" />
-              Unduh
-            </button>
-            <button
-              type="button"
-              onClick={() => setLastReceipt(null)}
-              aria-label="Tutup"
-              className="inline-flex items-center justify-center rounded-lg px-2 py-1.5 text-muted-foreground hover:bg-secondary"
-            >
-              <X className="size-3.5" aria-hidden="true" />
-            </button>
-          </div>
         </div>
       )}
       <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-xl shadow-primary/5">
@@ -1473,28 +1372,13 @@ function SuccessScreen({
   form,
   kategoriConfig,
   onReset,
-  referenceId,
 }: {
   form: FormState
   kategoriConfig: KategoriConfig
   onReset: () => void
-  referenceId: string
 }) {
   const isTim = kategoriConfig.timMode !== "solo"
   const contact = KATEGORI_CONTACT[kategoriConfig.value]
-
-  function handleDownload() {
-    downloadReceiptFile({
-      referenceId,
-      kategoriLabel: `${kategoriConfig.code} — ${kategoriConfig.label}`,
-      namaTim: form.namaTim,
-      ketua: form.ketua,
-      sekolah: form.sekolah,
-      email: form.email,
-      telepon: form.telepon,
-      savedAt: new Date().toISOString(),
-    })
-  }
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-16">
@@ -1557,15 +1441,7 @@ function SuccessScreen({
             </a>
           </div>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={handleDownload}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:brightness-110"
-            >
-              <Download className="size-4" aria-hidden="true" />
-              Unduh Bukti Pendaftaran
-            </button>
+          <div className="mt-6">
             <button
               type="button"
               onClick={onReset}
@@ -1574,10 +1450,6 @@ function SuccessScreen({
               Daftar Lagi
             </button>
           </div>
-          <p className="mt-3 text-center text-[11px] text-muted-foreground">
-            Simpan file bukti ini — jangan hanya mengandalkan tampilan di layar, karena akan hilang jika halaman
-            di-refresh.
-          </p>
           <a
             href={`https://wa.me/${contact.whatsapp}`}
             target="_blank"
