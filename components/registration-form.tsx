@@ -1277,14 +1277,14 @@ function RegistrationFormInner() {
         </div>
       </div>
 
-      <p className="mt-6 text-center text-xs text-muted-foreground">
+      <p className="mt-6 text-center text-xs text-white/70">
         Butuh bantuan? Hubungi narahubung {kategoriConfig.code} melalui kontak resmi berikut.
       </p>
       <a
         href={`https://wa.me/${contact.whatsapp}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-2 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+        className="mt-2 flex items-center justify-center gap-1.5 text-sm font-semibold text-white hover:text-accent hover:underline"
       >
         <MessageCircle className="size-4" aria-hidden="true" />
         {contact.nama} (+{contact.whatsapp})
