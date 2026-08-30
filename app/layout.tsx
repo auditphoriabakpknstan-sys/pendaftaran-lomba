@@ -3,19 +3,16 @@ import type { Metadata, Viewport } from 'next'
 import { Plus_Jakarta_Sans, Sora } from 'next/font/google'
 import { ParticleBackground } from '@/components/particle-background'
 import './globals.css'
-
 const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
   variable: '--font-sans',
   display: 'swap',
 })
-
 const sora = Sora({
   subsets: ['latin'],
   variable: '--font-heading',
   display: 'swap',
 })
-
 export const metadata: Metadata = {
   title: 'Pendaftaran Peserta Lomba',
   description: 'Form pendaftaran peserta perlombaan yang cepat dan mudah',
@@ -38,7 +35,6 @@ export const metadata: Metadata = {
     apple: '/apple-icon.png',
   },
 }
-
 export const viewport: Viewport = {
   colorScheme: 'light dark',
   themeColor: [
@@ -46,7 +42,6 @@ export const viewport: Viewport = {
     { media: '(prefers-color-scheme: dark)', color: 'black' },
   ],
 }
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -54,9 +49,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id" className={`${jakarta.variable} ${sora.variable} bg-background`}>
-      <body className="font-sans antialiased">
+      <body className="relative font-sans antialiased">
         <ParticleBackground />
-        {children}
+        <div className="relative z-10">{children}</div>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
