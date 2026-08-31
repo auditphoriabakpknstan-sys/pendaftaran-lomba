@@ -42,12 +42,14 @@ import { cn } from "@/lib/utils"
  * =========================================================================
  * Ubah/tambah lomba dari SATU tempat ini. Setiap lomba (kategori) punya:
  * - timMode: "solo" (perorangan saja) | "opsional" (boleh sendiri/tim) | "wajib" (harus tim)
+ * - butuhPosterIg: khusus AEC — wajib unggah bukti share poster di IG Story
+ * - butuhFotoDiri: khusus AEC & LCCA — wajib unggah foto diri tiap anggota
  *
  * CATATAN REVISI: Berkas/link karya (upload essay/abstrak, link reels IG,
  * infografis, audio voice over) DIHAPUS TOTAL dari form pendaftaran ini.
- * Semua kategori sekarang hanya minta 5 berkas umum yang sama (lihat
- * bagian "Berkas Umum" di bawah) — pengumpulan karya dilakukan lewat
- * mekanisme terpisah di luar form ini.
+ * Berkas umum yang WAJIB untuk SEMUA kategori: Bukti Follow IG, KTM,
+ * Bukti Upload Twibbon, Bukti Pembayaran. Di luar itu ada dua berkas
+ * tambahan yang hanya wajib untuk kategori tertentu (lihat flag di atas).
  * ========================================================================= */
 
 type KategoriValue = "aec" | "arc" | "aice" | "avoc" | "lcca" | ""
@@ -62,6 +64,8 @@ type KategoriConfig = {
   icon: React.ReactNode
   /** Khusus AEC: wajib unggah bukti share poster di IG Story. */
   butuhPosterIg?: boolean
+  /** Khusus AEC & LCCA: wajib unggah foto diri masing-masing anggota. */
+  butuhFotoDiri?: boolean
 }
 
 const kategoriList: KategoriConfig[] = [
@@ -73,6 +77,7 @@ const kategoriList: KategoriConfig[] = [
     timMode: "opsional",
     icon: <ScrollText className="size-5" aria-hidden="true" />,
     butuhPosterIg: true,
+    butuhFotoDiri: true,
   },
   {
     value: "arc",
@@ -105,6 +110,7 @@ const kategoriList: KategoriConfig[] = [
     desc: "Cerdas cermat bertema audit — wajib tim",
     timMode: "wajib",
     icon: <BrainCircuit className="size-5" aria-hidden="true" />,
+    butuhFotoDiri: true,
   },
 ]
 
@@ -551,7 +557,9 @@ function RegistrationFormInner() {
 
     if (files.followIg.length === 0) next.followIg = "Bukti follow Instagram wajib diunggah"
     if (files.ktm.length === 0) next.ktm = "Scan KTM/identitas mahasiswa wajib diunggah"
-    if (files.fotoDiri.length === 0) next.fotoDiri = "Foto diri masing-masing anggota wajib diunggah"
+    if (kategoriConfig.butuhFotoDiri && files.fotoDiri.length === 0) {
+      next.fotoDiri = "Foto diri masing-masing anggota wajib diunggah"
+    }
     if (files.twibbon.length === 0) next.twibbon = "Bukti upload twibbon wajib diunggah"
     if (kategoriConfig.butuhPosterIg && files.posterIg.length === 0) {
       next.posterIg = "Bukti share poster di IG Story wajib diunggah"
@@ -610,7 +618,8 @@ function RegistrationFormInner() {
         posterIg: "Bukti Share Poster IG Story",
         buktiBayar: "Bukti Pembayaran",
       }
-      const requiredFields = ["followIg", "ktm", "fotoDiri", "twibbon", "buktiBayar"]
+      const requiredFields = ["followIg", "ktm", "twibbon", "buktiBayar"]
+      if (kategoriConfig.butuhFotoDiri) requiredFields.push("fotoDiri")
       if (kategoriConfig.butuhPosterIg) requiredFields.push("posterIg")
       const missingFields = requiredFields.filter((f) => !fileUrls[f]?.length)
       if (missingFields.length > 0) {
@@ -967,17 +976,19 @@ function RegistrationFormInner() {
                     error={errors.ktm}
                     maxFiles={MAX_BUKTI}
                   />
-                  <MultiFileField
-                    label="Foto Diri Masing-Masing Anggota"
-                    hint="Upload foto diri tiap anggota tim (satu file per anggota) — JPG / PNG / PDF · maks 10MB"
-                    accept="image/png,image/jpeg,.pdf"
-                    icon={<UserRound className="size-4" />}
-                    files={files.fotoDiri}
-                    onSelect={(f) => selectMulti("fotoDiri", f, MAX_BUKTI)}
-                    onRemove={(i) => removeMulti("fotoDiri", i)}
-                    error={errors.fotoDiri}
-                    maxFiles={MAX_BUKTI}
-                  />
+                  {kategoriConfig.butuhFotoDiri && (
+                    <MultiFileField
+                      label="Foto Diri Masing-Masing Anggota"
+                      hint="Upload foto diri tiap anggota tim (satu file per anggota) — JPG / PNG / PDF · maks 10MB"
+                      accept="image/png,image/jpeg,.pdf"
+                      icon={<UserRound className="size-4" />}
+                      files={files.fotoDiri}
+                      onSelect={(f) => selectMulti("fotoDiri", f, MAX_BUKTI)}
+                      onRemove={(i) => removeMulti("fotoDiri", i)}
+                      error={errors.fotoDiri}
+                      maxFiles={MAX_BUKTI}
+                    />
+                  )}
                   <MultiFileField
                     label="Bukti Upload Twibbon"
                     hint="Screenshot twibbon yang telah diunggah — JPG / PNG · maks 10MB"
@@ -991,7 +1002,7 @@ function RegistrationFormInner() {
                   />
                   {kategoriConfig.butuhPosterIg && (
                     <MultiFileField
-                      label="Bukti Upload Poster ke IG Story (khusus AEC)"
+                      label="Bukti Upload Poster ke IG Story"
                       hint="Screenshot poster AEC yang telah diunggah ke Instagram Story — JPG / PNG · maks 10MB"
                       accept="image/png,image/jpeg"
                       icon={<ImageIcon className="size-4" />}
