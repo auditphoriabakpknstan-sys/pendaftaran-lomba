@@ -251,7 +251,7 @@ const kategoriBatches: Record<Exclude<KategoriValue, "">, Batch[]> = {
 
 const PHONE_REGEX = /^[0-9+\s-]{8,}$/
 
-const steps = ["Data Peserta", "Berkas", "Pembayaran"]
+const steps = ["Data Peserta", "Berkas", "Pembayaran", "Review"]
 
 // Info rekening pembayaran — dipakai SAMA untuk semua kategori lomba.
 const BANKS = [
@@ -323,6 +323,41 @@ function hasPendingUploads(files: FileState) {
   return [files.followIg, files.ktm, files.fotoDiri, files.twibbon, files.posterIg, files.buktiBayar].some((list) =>
     list.some((f) => f.uploading),
   )
+}
+
+/**
+ * Hitung persentase kelengkapan pengisian form (data + berkas wajib sesuai
+ * kategori). Dipakai untuk banner "progres dipulihkan".
+ */
+function calculateProgress(form: FormState, files: FileState, kategoriConfig: KategoriConfig | null): number {
+  if (!kategoriConfig) return 0
+  const timWajib = kategoriConfig.timMode === "wajib"
+
+  const dataChecks: boolean[] = [
+    !!form.ketua.trim(),
+    !!form.sekolah.trim(),
+    !!form.kota.trim(),
+    !!form.telepon.trim(),
+    !!form.email.trim(),
+    form.pakta,
+  ]
+  if (timWajib) {
+    dataChecks.push(!!form.namaTim.trim(), !!form.anggota1.trim(), !!form.anggota2.trim())
+  }
+
+  const fileChecks: boolean[] = [
+    files.followIg.length > 0,
+    files.ktm.length > 0,
+    files.twibbon.length > 0,
+    files.buktiBayar.length > 0,
+  ]
+  if (kategoriConfig.butuhFotoDiri) fileChecks.push(files.fotoDiri.length > 0)
+  if (kategoriConfig.butuhPosterIg) fileChecks.push(files.posterIg.length > 0)
+
+  const all = [...dataChecks, ...fileChecks]
+  if (all.length === 0) return 0
+  const done = all.filter(Boolean).length
+  return Math.round((done / all.length) * 100)
 }
 
 type Draft = {
@@ -583,11 +618,26 @@ function RegistrationFormInner() {
     if (validateFiles()) goTo(2)
   }
 
+  /** Validasi bukti pembayaran, lalu lanjut ke halaman Review (bukan langsung submit). */
+  function handleNextBayar() {
+    if (files.buktiBayar.length === 0) {
+      setErrors({ buktiBayar: "Bukti pembayaran wajib diunggah" })
+      scrollToError()
+      return
+    }
+    if (hasPendingUploads(files)) {
+      setSubmitError("Masih ada berkas yang sedang diunggah. Tunggu sebentar sampai semua selesai, lalu coba lagi.")
+      return
+    }
+    setSubmitError("")
+    goTo(3)
+  }
+
   async function handleSubmit() {
     if (!kategoriConfig) return
     if (files.buktiBayar.length === 0) {
       setErrors({ buktiBayar: "Bukti pembayaran wajib diunggah" })
-      scrollToError()
+      goTo(2)
       return
     }
 
@@ -717,15 +767,25 @@ function RegistrationFormInner() {
 
   const countdownText = batchStatus.text
   const contact = KATEGORI_CONTACT[kategoriConfig.value]
+  const progress = calculateProgress(form, files, kategoriConfig)
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 md:py-16">
       {draftRestored && step === 0 && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-card/95 p-4 shadow-lg shadow-black/20 backdrop-blur-sm">
-          <p className="text-sm text-foreground">
-            Progres pengisian sebelumnya untuk lomba ini berhasil dipulihkan, termasuk berkas yang sudah selesai
-            diunggah.
-          </p>
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-primary/30 bg-card/95 p-4 shadow-lg shadow-black/20 backdrop-blur-sm">
+          <div className="flex-1">
+            <p className="text-sm text-foreground">
+              Progres pengisian sebelumnya untuk lomba ini berhasil dipulihkan (
+              <span className="font-semibold text-primary">{progress}% lengkap</span>), termasuk berkas yang sudah
+              selesai diunggah.
+            </p>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-500"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
           <button
             type="button"
             onClick={() => setDraftRestored(false)}
@@ -1109,7 +1169,42 @@ function RegistrationFormInner() {
               )}
 
               <div className="flex gap-3">
-                <button type="button" onClick={() => goTo(1)} className={cn(ghostBtn, "flex-1")} disabled={submitting}>
+                <button type="button" onClick={() => goTo(1)} className={cn(ghostBtn, "flex-1")}>
+                  <ArrowLeft className="size-5" aria-hidden="true" />
+                  Kembali
+                </button>
+                <button type="button" onClick={handleNextBayar} className={cn(primaryBtn, "flex-1")}>
+                  Lanjut ke Review
+                  <ArrowRight className="size-5" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-8">
+              <Section
+                number="4"
+                title="Review & Konfirmasi"
+                description="Periksa kembali data dan berkas kamu — klik nama file untuk membukanya, sebelum mengirim pendaftaran"
+              >
+                <ReviewSummary
+                  form={form}
+                  files={files}
+                  kategoriConfig={kategoriConfig}
+                  isTim={isTim}
+                  onEditStep={goTo}
+                />
+              </Section>
+
+              {submitError && (
+                <p role="status" className="rounded-lg bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+                  {submitError}
+                </p>
+              )}
+
+              <div className="flex gap-3">
+                <button type="button" onClick={() => goTo(2)} className={cn(ghostBtn, "flex-1")} disabled={submitting}>
                   <ArrowLeft className="size-5" aria-hidden="true" />
                   Kembali
                 </button>
@@ -1365,9 +1460,24 @@ function MultiFileField({
                 )}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-foreground">{file.name}</span>
+                {/* Klik nama file untuk buka & cek langsung berkas yang sudah terunggah. */}
+                {file.url ? (
+                  <a
+                    href={file.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex min-w-0 items-center gap-1 truncate text-sm font-medium text-primary hover:underline"
+                  >
+                    <span className="truncate">{file.name}</span>
+                    <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
+                  </a>
+                ) : (
+                  <span className="block truncate text-sm font-medium text-foreground">{file.name}</span>
+                )}
                 <span className="block text-xs text-muted-foreground">
-                  {file.uploading ? "Mengunggah…" : `${(file.size / 1024).toFixed(0)} KB · tersimpan`}
+                  {file.uploading
+                    ? "Mengunggah…"
+                    : `${(file.size / 1024).toFixed(0)} KB · tersimpan — klik nama file untuk cek`}
                 </span>
               </span>
               <button
@@ -1414,6 +1524,121 @@ function MultiFileField({
 
       <input ref={inputRef} type="file" accept={accept} multiple className="sr-only" onChange={handleSelect} />
       {error && <p className="text-xs font-medium text-destructive">{error}</p>}
+    </div>
+  )
+}
+
+/* ---------- Halaman Review ---------- */
+
+function ReviewSummary({
+  form,
+  files,
+  kategoriConfig,
+  isTim,
+  onEditStep,
+}: {
+  form: FormState
+  files: FileState
+  kategoriConfig: KategoriConfig
+  isTim: boolean
+  onEditStep: (step: number) => void
+}) {
+  return (
+    <div className="space-y-5">
+      <ReviewBlock title={isTim ? "Data Tim" : "Data Peserta"} onEdit={() => onEditStep(0)}>
+        <dl className="space-y-2 text-sm">
+          {isTim && form.namaTim && <ReviewRow label="Nama Tim" value={form.namaTim} />}
+          <ReviewRow label={isTim ? "Ketua Tim/Peserta" : "Nama Peserta"} value={form.ketua} />
+          {form.anggota1 && <ReviewRow label="Anggota 1" value={form.anggota1} />}
+          {form.anggota2 && <ReviewRow label="Anggota 2" value={form.anggota2} />}
+          <ReviewRow label="Asal Institusi" value={form.sekolah} />
+          <ReviewRow label="Kota Asal" value={form.kota} />
+          <ReviewRow label="No. Telepon" value={form.telepon} />
+          <ReviewRow label="Email" value={form.email} />
+          <ReviewRow label="Pakta Integritas" value={form.pakta ? "Disetujui" : "Belum disetujui"} />
+        </dl>
+      </ReviewBlock>
+
+      <ReviewBlock title="Berkas" onEdit={() => onEditStep(1)}>
+        <div className="space-y-4">
+          <ReviewFileGroup label="Bukti Follow Instagram" files={files.followIg} />
+          <ReviewFileGroup label="Scan KTM / Surat Keterangan Mahasiswa Aktif" files={files.ktm} />
+          {kategoriConfig.butuhFotoDiri && (
+            <ReviewFileGroup label="Foto Diri Masing-Masing Anggota" files={files.fotoDiri} />
+          )}
+          <ReviewFileGroup label="Bukti Upload Twibbon" files={files.twibbon} />
+          {kategoriConfig.butuhPosterIg && (
+            <ReviewFileGroup label="Bukti Upload Poster ke IG Story" files={files.posterIg} />
+          )}
+        </div>
+      </ReviewBlock>
+
+      <ReviewBlock title="Pembayaran" onEdit={() => onEditStep(2)}>
+        <ReviewFileGroup label="Bukti Pembayaran" files={files.buktiBayar} />
+      </ReviewBlock>
+    </div>
+  )
+}
+
+function ReviewBlock({ title, onEdit, children }: { title: string; onEdit: () => void; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-border bg-secondary/30 p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="font-heading text-sm font-bold text-foreground">{title}</h3>
+        <button type="button" onClick={onEdit} className="text-xs font-semibold text-primary hover:underline">
+          Ubah
+        </button>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function ReviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="text-right font-medium text-foreground">{value || "-"}</dd>
+    </div>
+  )
+}
+
+function ReviewFileGroup({ label, files }: { label: string; files: FileSlot[] }) {
+  return (
+    <div>
+      <p className="mb-1.5 flex items-center justify-between text-xs font-semibold text-muted-foreground">
+        <span>{label}</span>
+        <span>{files.length} file</span>
+      </p>
+      {files.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+          Belum ada berkas diunggah.
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {files.map((file) => (
+            <li
+              key={file.id}
+              className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2"
+            >
+              <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+              {file.url ? (
+                <a
+                  href={file.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex min-w-0 flex-1 items-center gap-1 truncate text-xs font-medium text-primary hover:underline"
+                >
+                  <span className="truncate">{file.name}</span>
+                  <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
+                </a>
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{file.name} (mengunggah…)</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
