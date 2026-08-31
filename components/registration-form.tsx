@@ -539,6 +539,8 @@ function RegistrationFormInner() {
     const next: Record<string, string> = {}
     if (timWajib && !form.namaTim.trim()) next.namaTim = "Nama tim wajib diisi"
     if (!form.ketua.trim()) next.ketua = isTim ? "Nama ketua tim wajib diisi" : "Nama peserta wajib diisi"
+    if (timWajib && !form.anggota1.trim()) next.anggota1 = "Nama anggota 1 wajib diisi — tim harus terdiri dari 3 orang"
+    if (timWajib && !form.anggota2.trim()) next.anggota2 = "Nama anggota 2 wajib diisi — tim harus terdiri dari 3 orang"
     if (!form.sekolah.trim()) next.sekolah = "Asal sekolah/universitas wajib diisi"
     if (!form.kota.trim()) next.kota = "Kota asal wajib diisi"
     if (!form.telepon.trim()) next.telepon = "Nomor telepon wajib diisi"
@@ -777,7 +779,7 @@ function RegistrationFormInner() {
                   timMode === "opsional"
                     ? "Boleh daftar sendiri atau berkelompok — kosongkan Nama Tim & anggota kalau daftar sendiri"
                     : timMode === "wajib"
-                      ? "Lomba ini wajib diikuti secara berkelompok"
+                      ? "Lomba ini wajib diikuti secara berkelompok, tepat 3 orang (ketua + 2 anggota)"
                       : "Lengkapi data diri Anda"
                 }
               >
@@ -832,26 +834,36 @@ function RegistrationFormInner() {
                     <p className="mb-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
                       <Users className="size-4" aria-hidden="true" />
                       {timWajib
-                        ? "Anggota tim (1–3 orang termasuk ketua)"
+                        ? "Wajib 3 orang (ketua + 2 anggota)"
                         : "Anggota tim bersifat opsional (1–3 orang termasuk ketua)"}
                     </p>
                     <div className="grid gap-4 md:grid-cols-2">
-                      <Field label="Nama Anggota 1" icon={<User className="size-4" />}>
+                      <Field
+                        label="Nama Anggota 1"
+                        required={timWajib}
+                        error={errors.anggota1}
+                        icon={<User className="size-4" />}
+                      >
                         <input
                           type="text"
                           value={form.anggota1}
                           onChange={(e) => update("anggota1", e.target.value)}
-                          placeholder="Opsional"
-                          className={inputClass(false)}
+                          placeholder={timWajib ? "Nama lengkap anggota 1" : "Opsional"}
+                          className={inputClass(!!errors.anggota1)}
                         />
                       </Field>
-                      <Field label="Nama Anggota 2" icon={<User className="size-4" />}>
+                      <Field
+                        label="Nama Anggota 2"
+                        required={timWajib}
+                        error={errors.anggota2}
+                        icon={<User className="size-4" />}
+                      >
                         <input
                           type="text"
                           value={form.anggota2}
                           onChange={(e) => update("anggota2", e.target.value)}
-                          placeholder="Opsional"
-                          className={inputClass(false)}
+                          placeholder={timWajib ? "Nama lengkap anggota 2" : "Opsional"}
+                          className={inputClass(!!errors.anggota2)}
                         />
                       </Field>
                     </div>
