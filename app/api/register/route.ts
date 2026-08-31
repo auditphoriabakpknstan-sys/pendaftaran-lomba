@@ -114,11 +114,19 @@ export async function POST(req: Request) {
       )
     }
 
-    if (data.kategori === "lcca" && !data.namaTim.trim()) {
-      return NextResponse.json(
-        { ok: false, message: "LCCA wajib beregu — Nama Tim harus diisi." },
-        { status: 400 },
-      )
+    if (data.kategori === "lcca") {
+      if (!data.namaTim.trim()) {
+        return NextResponse.json(
+          { ok: false, message: "LCCA wajib beregu — Nama Tim harus diisi." },
+          { status: 400 },
+        )
+      }
+      if (!data.anggota1.trim() || !data.anggota2.trim()) {
+        return NextResponse.json(
+          { ok: false, message: "LCCA wajib terdiri dari 3 orang — Nama Anggota 1 dan Anggota 2 harus diisi." },
+          { status: 400 },
+        )
+      }
     }
 
     const requiredFileFields = [...REQUIRED_FILE_FIELDS, ...(KATEGORI_EXTRA_FILE_REQUIREMENTS[data.kategori] ?? [])]
