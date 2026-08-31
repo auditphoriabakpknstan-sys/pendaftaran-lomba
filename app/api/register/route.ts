@@ -15,18 +15,19 @@ const KATEGORI_LABEL: Record<string, string> = {
 
 // CATATAN REVISI: Berkas/link karya (upload essay/abstrak, link reels IG,
 // infografis, audio voice over) DIHAPUS TOTAL dari alur pendaftaran ini.
-// Semua kategori wajib mengunggah 5 berkas umum di bawah, DITAMBAH satu
-// berkas tambahan khusus untuk AEC (lihat KATEGORI_EXTRA_FILE_REQUIREMENTS).
-const REQUIRED_FILE_FIELDS = ["followIg", "ktm", "fotoDiri", "twibbon", "buktiBayar"] as const
+// Berkas umum di bawah WAJIB untuk SEMUA kategori. Selain itu ada dua
+// berkas tambahan yang cuma wajib untuk kategori tertentu (lihat
+// KATEGORI_EXTRA_FILE_REQUIREMENTS): "fotoDiri" khusus AEC & LCCA,
+// "posterIg" khusus AEC.
+const REQUIRED_FILE_FIELDS = ["followIg", "ktm", "twibbon", "buktiBayar"] as const
 
-// Requirement berkas tambahan per kategori — saat ini hanya AEC yang wajib
-// mengunggah bukti share poster di IG Story.
+// Requirement berkas tambahan per kategori.
 const KATEGORI_EXTRA_FILE_REQUIREMENTS: Record<string, string[]> = {
-  aec: ["posterIg"],
+  aec: ["posterIg", "fotoDiri"],
   arc: [],
   aice: [],
   avoc: [],
-  lcca: [],
+  lcca: ["fotoDiri"],
 }
 
 const FILE_LABELS: Record<string, string> = {
