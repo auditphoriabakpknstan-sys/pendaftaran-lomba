@@ -209,7 +209,7 @@ const initialFiles: FileState = {
   buktiBayar: [],
 }
 
-const MAX_BUKTI = 10
+const MAX_BUKTI = 3
 const MAX_BAYAR = 5
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
