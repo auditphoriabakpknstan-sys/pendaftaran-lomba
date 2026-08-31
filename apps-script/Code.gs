@@ -35,18 +35,44 @@
  * - Tab "Peserta" (master, berisi SEMUA peserta dari semua kategori)
  * - Tab sesuai nama kategori lombanya (dibuat otomatis kalau belum ada,
  *   header-nya ikut disalin dari tab Peserta)
+ *
+ * DAFTAR BERKAS SAAT INI (sudah tidak ada berkas/link karya sama sekali):
+ * - followIg  : Bukti Follow IG        — WAJIB untuk SEMUA kategori
+ * - ktm       : KTM - Identitas        — WAJIB untuk SEMUA kategori
+ * - fotoDiri  : Foto Diri Anggota      — WAJIB KHUSUS AEC & LCCA saja
+ * - twibbon   : Bukti Upload Twibbon   — WAJIB untuk SEMUA kategori
+ * - posterIg  : Bukti Share Poster IG Story — WAJIB KHUSUS AEC saja
+ * - buktiBayar: Bukti Pembayaran       — WAJIB untuk SEMUA kategori
+ * Field "abstrak" (berkas karya) dan "posterWa" (share poster ke grup WA)
+ * dari versi lama SUDAH DIHAPUS TOTAL dan tidak diproses lagi di sini.
+ *
+ * !!! PENTING SETELAH UPDATE INI !!!
+ * Pastikan header (baris 1) tab "Peserta" di spreadsheet Anda punya urutan
+ * kolom PERSIS seperti berikut (buat manual kalau belum ada / edit kalau
+ * urutannya beda):
+ *   Waktu | No Referensi Internal | Kategori | Nama Tim | Ketua | Anggota 1 |
+ *   Anggota 2 | Sekolah | Kota | WhatsApp | Email |
+ *   Bukti Follow IG | KTM - Identitas | Foto Diri Anggota |
+ *   Bukti Upload Twibbon | Bukti Share Poster IG Story | Bukti Pembayaran
+ * Kolom "Foto Diri Anggota" dan "Bukti Share Poster IG Story" akan TETAP
+ * ADA untuk semua kategori, tapi cuma terisi untuk kategori yang memang
+ * mewajibkannya (lihat daftar di atas) — kosong untuk kategori lain, itu
+ * normal dan bukan bug.
+ * Kalau tab-tab kategori (AEC/ARC/AICE/AVOC/LCCA) sudah pernah dibuat
+ * sebelum update ini, sesuaikan juga headernya secara manual — tab
+ * kategori BARU yang dibuat setelah update ini otomatis ikut header tab
+ * "Peserta" yang baru.
  */
 
 const SHEET_NAME = "Peserta"
 const DRIVE_FOLDER_ID = "1nbNAChSpVAaSXwNm3R53Q20NGVwuiSA1"
 
 const FILE_LABELS = {
-  abstrak: "Karya - Abstrak",
   followIg: "Bukti Follow IG",
   ktm: "KTM - Identitas",
-  posterWa: "Bukti Share Poster WA",
-  posterIg: "Bukti Share Poster IG",
+  fotoDiri: "Foto Diri Anggota",
   twibbon: "Bukti Upload Twibbon",
+  posterIg: "Bukti Share Poster IG Story",
   buktiBayar: "Bukti Pembayaran",
 }
 
@@ -115,7 +141,10 @@ function guessExtension(url, blob) {
 
 /**
  * Unduh sekumpulan berkas dari Vercel Blob (server-ke-server, tanpa isu CORS)
- * lalu simpan permanen ke folder submission di Drive.
+ * lalu simpan permanen ke folder submission di Drive. Kalau "urls" kosong
+ * (misalnya field ini memang tidak wajib untuk kategori tersebut), fungsi
+ * ini langsung return array kosong tanpa error — jadi aman dipanggil untuk
+ * field manapun tanpa perlu cek kategori dulu di sini.
  */
 function downloadAndSaveGroup(subFolder, label, urls) {
   const links = []
@@ -161,6 +190,11 @@ function getOrCreateCategorySheet(ss, masterSheet, categoryName) {
  * Input: { referenceId, kategori, kategoriLabel, namaTim, ketua, anggota1,
  *          anggota2, sekolah, kota, telepon, email,
  *          fileUrls: { fieldName: ["https://...blob.vercel-storage.com/...", ...] } }
+ *
+ * fileUrls hanya akan berisi field yang memang diunggah peserta — untuk
+ * kategori yang tidak mewajibkan fotoDiri/posterIg, field tsb bisa saja
+ * tidak ada sama sekali di fileUrls, atau ada tapi array-nya kosong.
+ * saveGroup() di bawah aman menangani kedua kondisi itu.
  */
 function handleSubmit(data) {
   const ss = SpreadsheetApp.getActiveSpreadsheet()
@@ -182,12 +216,11 @@ function handleSubmit(data) {
     return downloadAndSaveGroup(submissionFolder, FILE_LABELS[field] || field, fileUrls[field])
   }
 
-  const linkAbstrak = saveGroup("abstrak")
   const linkFollowIg = saveGroup("followIg")
   const linkKtm = saveGroup("ktm")
-  const linkPosterWa = saveGroup("posterWa")
-  const linkPosterIg = saveGroup("posterIg")
+  const linkFotoDiri = saveGroup("fotoDiri")
   const linkTwibbon = saveGroup("twibbon")
+  const linkPosterIg = saveGroup("posterIg")
   const linkBuktiBayar = saveGroup("buktiBayar")
 
   const row = [
@@ -202,12 +235,11 @@ function handleSubmit(data) {
     data.kota || "",
     toWaLink(data.telepon),
     data.email || "",
-    linkAbstrak.join("\n"),
     linkFollowIg.join("\n"),
     linkKtm.join("\n"),
-    linkPosterWa.join("\n"),
-    linkPosterIg.join("\n"),
+    linkFotoDiri.join("\n"),
     linkTwibbon.join("\n"),
+    linkPosterIg.join("\n"),
     linkBuktiBayar.join("\n"),
   ]
 
@@ -229,7 +261,7 @@ function doGet() {
     JSON.stringify({
       ok: true,
       message: "Apps Script pendaftaran aktif.",
-      version: "vercel-blob-final-1", // ganti string ini tiap kali update Code.gs, buat cek deployment aktif
+      version: "vercel-blob-final-5", // ganti string ini tiap kali update Code.gs, buat cek deployment aktif
     }),
   ).setMimeType(ContentService.MimeType.JSON)
 }
