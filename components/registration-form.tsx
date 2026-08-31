@@ -772,20 +772,11 @@ function RegistrationFormInner() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 md:py-16">
       {draftRestored && step === 0 && (
-        <div className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-primary/30 bg-card/95 p-4 shadow-lg shadow-black/20 backdrop-blur-sm">
-          <div className="flex-1">
-            <p className="text-sm text-foreground">
-              Progres pengisian sebelumnya untuk lomba ini berhasil dipulihkan (
-              <span className="font-semibold text-primary">{progress}% lengkap</span>), termasuk berkas yang sudah
-              selesai diunggah.
-            </p>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-              <div
-                className="h-full rounded-full bg-primary transition-all duration-500"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-card/95 p-4 shadow-lg shadow-black/20 backdrop-blur-sm">
+          <p className="text-sm text-foreground">
+            Progres pengisian sebelumnya untuk lomba ini berhasil dipulihkan, termasuk berkas yang sudah selesai
+            diunggah.
+          </p>
           <button
             type="button"
             onClick={() => setDraftRestored(false)}
@@ -801,28 +792,32 @@ function RegistrationFormInner() {
         <header className="relative overflow-hidden bg-primary px-6 py-8 md:px-10">
           <div className="absolute -right-8 -top-8 size-40 rounded-full bg-primary-foreground/10" aria-hidden="true" />
           <div className="absolute -bottom-12 -left-6 size-40 rounded-full bg-accent/20" aria-hidden="true" />
-          <div className="relative">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-foreground/15 px-3 py-1 text-xs font-semibold text-primary-foreground">
-                <ShieldCheck className="size-3.5" aria-hidden="true" />
-                Pendaftaran Dibuka
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground">
-                <Clock className="size-3.5" aria-hidden="true" />
-                {countdownText}
-              </span>
-            </div>
-            <div className="mt-4 flex items-center gap-3">
-              <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
-                {kategoriConfig.icon}
+          <div className="relative flex items-center justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-foreground/15 px-3 py-1 text-xs font-semibold text-primary-foreground">
+                  <ShieldCheck className="size-3.5" aria-hidden="true" />
+                  Pendaftaran Dibuka
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground">
+                  <Clock className="size-3.5" aria-hidden="true" />
+                  {countdownText}
+                </span>
               </div>
-              <div>
-                <h1 className="font-heading text-2xl font-bold leading-tight text-primary-foreground text-balance md:text-3xl">
-                  {kategoriConfig.code}
-                </h1>
-                <p className="text-sm text-primary-foreground/80">{kategoriConfig.label}</p>
+              <div className="mt-4 flex items-center gap-3">
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
+                  {kategoriConfig.icon}
+                </div>
+                <div className="min-w-0">
+                  <h1 className="font-heading text-2xl font-bold leading-tight text-primary-foreground text-balance md:text-3xl">
+                    {kategoriConfig.code}
+                  </h1>
+                  <p className="text-sm text-primary-foreground/80">{kategoriConfig.label}</p>
+                </div>
               </div>
             </div>
+
+            <ProgressRing percent={progress} />
           </div>
         </header>
 
@@ -1362,6 +1357,60 @@ function useBatchStatus(batches: Batch[]): BatchStatus {
   }
 
   return { state: "closed", text: "Pendaftaran ditutup" }
+}
+
+/**
+ * Ring progress kelengkapan pengisian form — ditaruh di pojok kanan header,
+ * warna aksen emas di atas latar ungu biar kontras & langsung kebaca tanpa
+ * perlu dibaca teksnya. Persentase dihitung lewat calculateProgress().
+ */
+function ProgressRing({ percent }: { percent: number }) {
+  const size = 68
+  const stroke = 6
+  const radius = (size - stroke) / 2
+  const circumference = 2 * Math.PI * radius
+  const clamped = Math.min(100, Math.max(0, Math.round(percent)))
+  const offset = circumference - (clamped / 100) * circumference
+  const isDone = clamped >= 100
+
+  return (
+    <div className="flex shrink-0 flex-col items-center gap-1.5">
+      <div className="relative flex items-center justify-center drop-shadow-[0_2px_10px_rgba(0,0,0,0.18)]">
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="rgba(255,255,255,0.2)"
+            strokeWidth={stroke}
+          />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke={isDone ? "#ffffff" : "var(--accent)"}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            className="transition-[stroke-dashoffset] duration-700 ease-out"
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          {isDone ? (
+            <Check className="size-6 text-primary-foreground" aria-hidden="true" />
+          ) : (
+            <span className="font-heading text-base font-bold text-primary-foreground">{clamped}%</span>
+          )}
+        </div>
+      </div>
+      <span className="hidden text-[10px] font-semibold uppercase tracking-wider text-primary-foreground/70 sm:block">
+        {isDone ? "Lengkap" : "Progres"}
+      </span>
+    </div>
+  )
 }
 
 function Stepper({ current }: { current: number }) {
