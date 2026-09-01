@@ -15,9 +15,10 @@ const KATEGORI_LABEL: Record<string, string> = {
 
 // CATATAN REVISI: Berkas/link karya (upload essay/abstrak, link reels IG,
 // infografis, audio voice over) DIHAPUS TOTAL dari alur pendaftaran ini.
-// Berkas umum di bawah WAJIB untuk SEMUA kategori. Selain itu ada dua
-// berkas tambahan yang cuma wajib untuk kategori tertentu (lihat
-// KATEGORI_EXTRA_FILE_REQUIREMENTS): "fotoDiri" khusus AEC & LCCA,
+// Berkas umum di bawah WAJIB untuk SEMUA kategori. Selain itu ada berkas
+// tambahan yang cuma wajib untuk kategori tertentu (lihat
+// KATEGORI_EXTRA_FILE_REQUIREMENTS): "fotoDiri" khusus AEC, AICE & LCCA
+// (dipakai untuk validasi identitas peserta saat pelaksanaan final),
 // "posterIg" khusus AEC.
 const REQUIRED_FILE_FIELDS = ["followIg", "ktm", "twibbon", "buktiBayar"] as const
 
@@ -25,7 +26,7 @@ const REQUIRED_FILE_FIELDS = ["followIg", "ktm", "twibbon", "buktiBayar"] as con
 const KATEGORI_EXTRA_FILE_REQUIREMENTS: Record<string, string[]> = {
   aec: ["posterIg", "fotoDiri"],
   arc: [],
-  aice: [],
+  aice: ["fotoDiri"],
   avoc: [],
   lcca: ["fotoDiri"],
 }
@@ -45,8 +46,15 @@ const dataSchema = z.object({
   }),
   namaTim: z.string().optional().default(""),
   ketua: z.string().min(2, "Nama ketua/peserta wajib diisi."),
+  // Program studi khusus dipakai/divalidasi untuk kategori LCCA (validasi
+  // ketentuan jurusan yang linier dengan Akuntansi dan sejenisnya), tapi
+  // tetap diterima sebagai field opsional untuk kategori lain supaya schema
+  // satu ini bisa dipakai bersama tanpa branching per kategori.
+  prodiKetua: z.string().optional().default(""),
   anggota1: z.string().optional().default(""),
+  prodiAnggota1: z.string().optional().default(""),
   anggota2: z.string().optional().default(""),
+  prodiAnggota2: z.string().optional().default(""),
   sekolah: z.string().min(2, "Asal sekolah/universitas wajib diisi."),
   kota: z.string().min(2, "Kota asal wajib diisi."),
   telepon: z
@@ -127,6 +135,17 @@ export async function POST(req: Request) {
           { status: 400 },
         )
       }
+      // Program studi wajib untuk seluruh anggota LCCA — dipakai panitia untuk
+      // memvalidasi ketentuan jurusan yang linier dengan Akuntansi dan sejenisnya.
+      if (!data.prodiKetua.trim() || !data.prodiAnggota1.trim() || !data.prodiAnggota2.trim()) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message: "LCCA wajib mengisi Program Studi untuk ketua tim dan seluruh anggota.",
+          },
+          { status: 400 },
+        )
+      }
     }
 
     const requiredFileFields = [...REQUIRED_FILE_FIELDS, ...(KATEGORI_EXTRA_FILE_REQUIREMENTS[data.kategori] ?? [])]
@@ -149,8 +168,11 @@ export async function POST(req: Request) {
         kategoriLabel: KATEGORI_LABEL[data.kategori] ?? data.kategori,
         namaTim: data.namaTim,
         ketua: data.ketua,
+        prodiKetua: data.prodiKetua,
         anggota1: data.anggota1,
+        prodiAnggota1: data.prodiAnggota1,
         anggota2: data.anggota2,
+        prodiAnggota2: data.prodiAnggota2,
         sekolah: data.sekolah,
         kota: data.kota,
         telepon: data.telepon,
