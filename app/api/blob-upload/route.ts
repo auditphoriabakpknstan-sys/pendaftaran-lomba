@@ -1,24 +1,19 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client"
 import { NextResponse } from "next/server"
+
 export const runtime = "nodejs"
 
-// Field yang butuh ukuran/tipe berbeda dari default (10MB, gambar+PDF).
-// AVOC (voice over) perlu file audio sampai 100MB.
-const FIELD_OVERRIDES: Record<string, { allowedContentTypes: string[]; maximumSizeInBytes: number }> = {
-  karyaAudio: {
-    allowedContentTypes: [
-      "audio/mpeg",
-      "audio/mp3",
-      "audio/wav",
-      "audio/x-wav",
-      "audio/mp4",
-      "audio/x-m4a",
-      "audio/aac",
-      "audio/ogg",
-    ],
-    maximumSizeInBytes: 100 * 1024 * 1024, // 100MB
-  },
-}
+// Field yang dipakai form pendaftaran saat ini: followIg, ktm, fotoDiri,
+// twibbon, posterIg, buktiBayar — semuanya gambar/PDF berukuran wajar, jadi
+// cukup pakai DEFAULT_LIMIT di bawah untuk semuanya (termasuk "fotoDiri"
+// yang sekarang juga dipakai AICE, selain AEC & LCCA).
+//
+// FIELD_OVERRIDES disiapkan kalau suatu saat ada field lain yang butuh
+// tipe/ukuran berbeda dari default (mis. upload audio/video besar). Tidak
+// ada field seperti itu di form pendaftaran saat ini — berkas karya
+// (essay/abstrak, reels IG, infografis, audio voice over) sudah dihapus
+// total dari alur pendaftaran ini, jadi map ini sengaja dikosongkan.
+const FIELD_OVERRIDES: Record<string, { allowedContentTypes: string[]; maximumSizeInBytes: number }> = {}
 
 const DEFAULT_LIMIT = {
   allowedContentTypes: [
@@ -50,7 +45,6 @@ export async function POST(request: Request): Promise<NextResponse> {
           // clientPayload tidak valid JSON — abaikan, pakai limit default
         }
         const limit = FIELD_OVERRIDES[field] ?? DEFAULT_LIMIT
-
         return {
           allowedContentTypes: limit.allowedContentTypes,
           addRandomSuffix: true,
