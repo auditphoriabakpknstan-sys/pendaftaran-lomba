@@ -210,7 +210,8 @@ const initialFiles: FileState = {
 }
 
 const MAX_BUKTI = 3
-const MAX_BAYAR = 5
+const MAX_FOLLOW_IG = 6
+const MAX_BAYAR = 2
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
 /**
@@ -1024,7 +1025,7 @@ function RegistrationFormInner() {
               <Section number="2" title="Unggah Berkas" description={`Kategori Lomba: ${kategoriConfig.code} — ${kategoriConfig.label}`}>
                 <div className="space-y-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Berkas Umum &middot; maks {MAX_BUKTI} file per berkas
+                    Berkas Umum &middot; batas jumlah berkas berbeda tiap jenis, lihat keterangan di bawah tiap kolom
                   </p>
                   <MultiFileField
                     label="Bukti Follow Instagram"
@@ -1032,10 +1033,10 @@ function RegistrationFormInner() {
                     accept="image/png,image/jpeg"
                     icon={<AtSign className="size-4" />}
                     files={files.followIg}
-                    onSelect={(f) => selectMulti("followIg", f, MAX_BUKTI)}
+                    onSelect={(f) => selectMulti("followIg", f, MAX_FOLLOW_IG)}
                     onRemove={(i) => removeMulti("followIg", i)}
                     error={errors.followIg}
-                    maxFiles={MAX_BUKTI}
+                    maxFiles={MAX_FOLLOW_IG}
                   />
                   <MultiFileField
                     label="Scan KTM / Surat Keterangan Mahasiswa Aktif"
@@ -1665,8 +1666,8 @@ function ReviewBlock({ title, onEdit, children }: { title: string; onEdit: () =>
 function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right font-medium text-foreground">{value || "-"}</dd>
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 flex-1 break-words text-right font-medium text-foreground">{value || "-"}</dd>
     </div>
   )
 }
@@ -1751,16 +1752,16 @@ function SuccessScreen({
           </p>
           <dl className="mt-6 space-y-2 rounded-2xl border border-border bg-secondary/40 p-5 text-sm">
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">{isTim ? "Ketua Tim" : "Nama Peserta"}</dt>
-              <dd className="font-medium text-foreground">{form.ketua}</dd>
+              <dt className="shrink-0 text-muted-foreground">{isTim ? "Ketua Tim" : "Nama Peserta"}</dt>
+              <dd className="min-w-0 flex-1 break-words text-right font-medium text-foreground">{form.ketua}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Institusi</dt>
-              <dd className="text-right font-medium text-foreground">{form.sekolah}</dd>
+              <dt className="shrink-0 text-muted-foreground">Institusi</dt>
+              <dd className="min-w-0 flex-1 break-words text-right font-medium text-foreground">{form.sekolah}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Email Konfirmasi</dt>
-              <dd className="text-right font-medium text-foreground">{form.email}</dd>
+              <dt className="shrink-0 text-muted-foreground">Email Konfirmasi</dt>
+              <dd className="min-w-0 flex-1 break-words text-right font-medium text-foreground">{form.email}</dd>
             </div>
           </dl>
           <p className="mt-4 text-center text-xs text-muted-foreground">
