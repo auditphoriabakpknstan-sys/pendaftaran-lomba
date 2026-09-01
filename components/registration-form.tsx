@@ -37,6 +37,21 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+/* =========================================================================
+ * KONFIGURASI CABANG LOMBA
+ * =========================================================================
+ * Ubah/tambah lomba dari SATU tempat ini. Setiap lomba (kategori) punya:
+ * - timMode: "solo" (perorangan saja) | "opsional" (boleh sendiri/tim) | "wajib" (harus tim)
+ * - butuhPosterIg: khusus AEC — wajib unggah bukti share poster di IG Story
+ * - butuhFotoDiri: khusus AEC & LCCA — wajib unggah foto diri tiap anggota
+ *
+ * CATATAN REVISI: Berkas/link karya (upload essay/abstrak, link reels IG,
+ * infografis, audio voice over) DIHAPUS TOTAL dari form pendaftaran ini.
+ * Berkas umum yang WAJIB untuk SEMUA kategori: Bukti Follow IG, KTM,
+ * Bukti Upload Twibbon, Bukti Pembayaran. Di luar itu ada dua berkas
+ * tambahan yang hanya wajib untuk kategori tertentu (lihat flag di atas).
+ * ========================================================================= */
+
 type KategoriValue = "aec" | "arc" | "aice" | "avoc" | "lcca" | ""
 type TimMode = "solo" | "opsional" | "wajib"
 
@@ -47,7 +62,9 @@ type KategoriConfig = {
   desc: string
   timMode: TimMode
   icon: React.ReactNode
+  /** Khusus AEC: wajib unggah bukti share poster di IG Story. */
   butuhPosterIg?: boolean
+  /** Khusus AEC & LCCA: wajib unggah foto diri masing-masing anggota. */
   butuhFotoDiri?: boolean
 }
 
@@ -101,6 +118,7 @@ function getKategoriConfig(value: KategoriValue): KategoriConfig | null {
   return kategoriList.find((k) => k.value === value) ?? null
 }
 
+/** Peta kode pendek (dipakai di URL deep-link dari Google Sites) -> value internal. */
 const CODE_TO_VALUE: Record<string, Exclude<KategoriValue, "">> = {
   aec: "aec",
   arc: "arc",
@@ -109,6 +127,12 @@ const CODE_TO_VALUE: Record<string, Exclude<KategoriValue, "">> = {
   lcca: "lcca",
 }
 
+/**
+ * Narahubung (contact person) khusus tiap cabang lomba — ditampilkan di
+ * footer form, otomatis berganti sesuai kategori yang sedang aktif.
+ * Nomor WA disimpan tanpa "+" dan tanpa spasi (format wa.me), nama tampilan
+ * boleh pakai format bebas.
+ */
 const KATEGORI_CONTACT: Record<Exclude<KategoriValue, "">, { nama: string; whatsapp: string }> = {
   aec: { nama: "Tira", whatsapp: "6285254131680" },
   arc: { nama: "Wahyu", whatsapp: "6285928106351" },
@@ -117,6 +141,11 @@ const KATEGORI_CONTACT: Record<Exclude<KategoriValue, "">, { nama: string; whats
   lcca: { nama: "Nazhila", whatsapp: "6289668665861" },
 }
 
+/**
+ * Link lanjutan (grup WhatsApp / info lomba) khusus tiap cabang — ditampilkan
+ * di halaman terakhir setelah pendaftaran berhasil, sesuai kategori yang
+ * didaftarkan peserta.
+ */
 const KATEGORI_LINK: Record<Exclude<KategoriValue, "">, string> = {
   aec: "http://staner.id/AECAuditphoria6",
   arc: "http://staner.id/ARCAuditphoria6",
@@ -138,6 +167,7 @@ type FormState = {
   kategori: KategoriValue
 }
 
+/** Satu slot berkas: bisa lagi diunggah, sudah selesai (ada url), atau gagal (ada error). */
 type FileSlot = {
   id: string
   name: string
@@ -152,6 +182,7 @@ type FileState = {
   ktm: FileSlot[]
   fotoDiri: FileSlot[]
   twibbon: FileSlot[]
+  /** Khusus kategori AEC — bukti share poster di IG Story. */
   posterIg: FileSlot[]
   buktiBayar: FileSlot[]
 }
@@ -181,8 +212,15 @@ const initialFiles: FileState = {
 const MAX_BUKTI = 3
 const MAX_FOLLOW_IG = 6
 const MAX_BAYAR = 2
-const MAX_FILE_SIZE = 10 * 1024 * 1024
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
+/**
+ * Jadwal pendaftaran per kategori, dibagi jadi beberapa batch. Peserta bisa
+ * daftar kapan saja SELAMA waktu sekarang berada di dalam salah satu batch
+ * di bawah — di luar itu (sebelum batch 1 mulai, atau setelah batch
+ * terakhir berakhir) pendaftaran otomatis dianggap tutup.
+ * Format tanggal: "YYYY-MM-DDTHH:mm:ss" (waktu lokal WIB).
+ */
 type Batch = { label: string; start: string; end: string }
 
 const kategoriBatches: Record<Exclude<KategoriValue, "">, Batch[]> = {
@@ -216,6 +254,7 @@ const PHONE_REGEX = /^[0-9+\s-]{8,}$/
 
 const steps = ["Data Peserta", "Berkas", "Pembayaran", "Review"]
 
+// Info rekening pembayaran — dipakai SAMA untuk semua kategori lomba.
 const BANKS = [
   {
     key: "cimb",
@@ -234,8 +273,12 @@ const BANKS = [
 ] as const
 
 const DRAFT_STORAGE_KEY = "auditphoria-form-draft"
-const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000
+const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000 // draft basi setelah 24 jam
 
+// File diunggah ke Vercel Blob dulu begitu dipilih, baru dipindah ke Drive
+// lewat Apps Script secara server-ke-server saat submit, supaya tidak kena
+// limit ukuran request 4.5MB milik Vercel Functions maupun isu CORS Apps
+// Script.
 async function uploadFileToBlob(field: string, file: File, referenceId: string): Promise<string> {
   const { upload } = await import("@vercel/blob/client")
   const blob = await upload(`pendaftaran/${referenceId}/${field}-${Date.now()}-${file.name}`, file, {
@@ -264,6 +307,7 @@ function makeFileSlot(file: File): FileSlot {
   }
 }
 
+/** Cuma slot yang benar-benar selesai diunggah (ada url) yang aman disimpan ke draft. */
 function sanitizeFilesForDraft(files: FileState): FileState {
   const clean = (list: FileSlot[]) => list.filter((f) => !f.uploading && !!f.url)
   return {
@@ -282,6 +326,10 @@ function hasPendingUploads(files: FileState) {
   )
 }
 
+/**
+ * Hitung persentase kelengkapan pengisian form (data + berkas wajib sesuai
+ * kategori). Dipakai untuk banner "progres dipulihkan".
+ */
 function calculateProgress(form: FormState, files: FileState, kategoriConfig: KategoriConfig | null): number {
   if (!kategoriConfig) return 0
   const timWajib = kategoriConfig.timMode === "wajib"
@@ -333,6 +381,11 @@ function loadDraft(kategori: KategoriValue): Draft | null {
     if (!draft.savedAt || Date.now() - draft.savedAt > DRAFT_MAX_AGE_MS) return null
     if (!draft.referenceId || !draft.form) return null
 
+    // PENTING: draft lama (dari versi kode sebelumnya, atau localStorage yang
+    // korup) bisa punya struktur "files" yang tidak lengkap / bukan array.
+    // Kalau langsung dipakai apa adanya, pemanggilan .map()/.filter() di
+    // tempat lain akan crash. Jadi di sini kita paksa semua field jadi array
+    // yang valid — fallback ke array kosong kalau bentuknya tidak sesuai.
     const rawFiles = draft.files as Partial<FileState> | undefined
     const safeFiles: FileState = {
       followIg: Array.isArray(rawFiles?.followIg) ? rawFiles.followIg : [],
@@ -358,16 +411,24 @@ function saveDraft(kategori: KategoriValue, draft: Draft) {
   if (typeof window === "undefined") return
   try {
     window.localStorage.setItem(draftKey(kategori), JSON.stringify(draft))
-  } catch {}
+  } catch {
+    // storage penuh / private browsing — abaikan, tidak fatal
+  }
 }
 
 function clearDraft(kategori: KategoriValue) {
   if (typeof window === "undefined") return
   try {
     window.localStorage.removeItem(draftKey(kategori))
-  } catch {}
+  } catch {
+    // abaikan
+  }
 }
 
+/**
+ * Wrapper luar: baca parameter URL (?kategori=aec dst) di dalam Suspense,
+ * seperti disyaratkan Next.js untuk useSearchParams pada Client Component.
+ */
 export function RegistrationForm() {
   return (
     <Suspense fallback={<FormSkeleton />}>
@@ -387,6 +448,9 @@ function FormSkeleton() {
 function RegistrationFormInner() {
   const searchParams = useSearchParams()
 
+  // Kategori diambil dari URL (?kategori=aec) — dikunci, TIDAK bisa diganti manual dari
+  // dalam form. Kalau parameter tidak ada / tidak valid, tampilkan halaman pilih lomba
+  // manual sebagai fallback supaya link lama / akses langsung tetap bisa dipakai.
   const kategoriFromUrl = (searchParams.get("kategori") || "").toLowerCase()
   const lockedKategori: KategoriValue = CODE_TO_VALUE[kategoriFromUrl] ?? ""
   const [manualKategori, setManualKategori] = useState<KategoriValue>("")
@@ -407,8 +471,12 @@ function RegistrationFormInner() {
   const formLoadedAt = useRef(Date.now())
   const submittingRef = useRef(false)
 
+  // Hook batch status dipanggil TANPA SYARAT di sini (sebelum early return
+  // apa pun) supaya urutan Hooks React selalu konsisten di setiap render.
   const batchStatus = useBatchStatus(kategoriConfig ? kategoriBatches[kategoriConfig.value] : [])
 
+  // Pulihkan draft (kalau ada & belum basi) — HANYA di client, supaya tidak
+  // bentrok dengan hasil render server (hydration).
   useEffect(() => {
     if (!activeKategori) return
     const draft = loadDraft(activeKategori)
@@ -423,6 +491,7 @@ function RegistrationFormInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKategori])
 
+  // Simpan draft setiap kali data berubah
   useEffect(() => {
     if (!activeKategori) return
     const isEmpty =
@@ -550,6 +619,7 @@ function RegistrationFormInner() {
     if (validateFiles()) goTo(2)
   }
 
+  /** Validasi bukti pembayaran, lalu lanjut ke halaman Review (bukan langsung submit). */
   function handleNextBayar() {
     if (files.buktiBayar.length === 0) {
       setErrors({ buktiBayar: "Bukti pembayaran wajib diunggah" })
@@ -669,15 +739,24 @@ function RegistrationFormInner() {
       await navigator.clipboard.writeText(norek)
       setCopiedBank(key)
       setTimeout(() => setCopiedBank(null), 2000)
-    } catch {}
+    } catch {
+      // abaikan
+    }
   }
 
+  // --- Tidak ada kategori terkunci dari URL & belum pilih manual -> tampilkan pemilih lomba ---
   if (!activeKategori || !kategoriConfig) {
     return <KategoriPicker onPick={pickKategoriManual} />
   }
 
   if (submitted) {
-    return <SuccessScreen form={form} kategoriConfig={kategoriConfig} onReset={reset} />
+    return (
+      <SuccessScreen
+        form={form}
+        kategoriConfig={kategoriConfig}
+        onReset={reset}
+      />
+    )
   }
 
   if (batchStatus.state === "closed") {
@@ -710,6 +789,7 @@ function RegistrationFormInner() {
         </div>
       )}
       <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-xl shadow-primary/5">
+        {/* Header */}
         <header className="relative overflow-hidden bg-primary px-6 py-8 md:px-10">
           <div className="absolute -right-8 -top-8 size-40 rounded-full bg-primary-foreground/10" aria-hidden="true" />
           <div className="absolute -bottom-12 -left-6 size-40 rounded-full bg-accent/20" aria-hidden="true" />
@@ -742,6 +822,7 @@ function RegistrationFormInner() {
           </div>
         </header>
 
+        {/* Stepper */}
         <Stepper current={step} />
 
         <div className="px-6 py-8 md:px-10">
@@ -758,6 +839,7 @@ function RegistrationFormInner() {
                       : "Lengkapi data diri Anda sesuai identitas resmi."
                 }
               >
+                {/* Honeypot anti-bot */}
                 <div className="absolute -left-[9999px] h-0 w-0 overflow-hidden opacity-0" aria-hidden="true">
                   <label htmlFor="website">Jangan isi field ini</label>
                   <input
@@ -772,7 +854,12 @@ function RegistrationFormInner() {
                 </div>
 
                 {isTim && (
-                  <Field label="Nama Tim" required={timWajib} error={errors.namaTim} icon={<Users className="size-4" />}>
+                  <Field
+                    label="Nama Tim"
+                    required={timWajib}
+                    error={errors.namaTim}
+                    icon={<Users className="size-4" />}
+                  >
                     <input
                       type="text"
                       value={form.namaTim}
@@ -809,7 +896,12 @@ function RegistrationFormInner() {
                         : "Jumlah anggota tim bersifat opsional, maksimal tiga orang termasuk ketua."}
                     </p>
                     <div className="grid gap-4 md:grid-cols-2">
-                      <Field label="Nama Anggota 1" required={timWajib} error={errors.anggota1} icon={<User className="size-4" />}>
+                      <Field
+                        label="Nama Anggota 1"
+                        required={timWajib}
+                        error={errors.anggota1}
+                        icon={<User className="size-4" />}
+                      >
                         <input
                           type="text"
                           value={form.anggota1}
@@ -818,7 +910,12 @@ function RegistrationFormInner() {
                           className={inputClass(!!errors.anggota1)}
                         />
                       </Field>
-                      <Field label="Nama Anggota 2" required={timWajib} error={errors.anggota2} icon={<User className="size-4" />}>
+                      <Field
+                        label="Nama Anggota 2"
+                        required={timWajib}
+                        error={errors.anggota2}
+                        icon={<User className="size-4" />}
+                      >
                         <input
                           type="text"
                           value={form.anggota2}
@@ -832,7 +929,12 @@ function RegistrationFormInner() {
                 )}
 
                 <div className="grid gap-5 md:grid-cols-2">
-                  <Field label="Asal Sekolah / Universitas" required error={errors.sekolah} icon={<Building2 className="size-4" />}>
+                  <Field
+                    label="Asal Sekolah / Universitas"
+                    required
+                    error={errors.sekolah}
+                    icon={<Building2 className="size-4" />}
+                  >
                     <input
                       type="text"
                       value={form.sekolah}
@@ -853,7 +955,12 @@ function RegistrationFormInner() {
                 </div>
 
                 <div className="grid gap-5 md:grid-cols-2">
-                  <Field label={isTim ? "No. Telepon Ketua Tim" : "No. Telepon Peserta"} required error={errors.telepon} icon={<Phone className="size-4" />}>
+                  <Field
+                    label={isTim ? "No. Telepon Ketua Tim" : "No. Telepon Peserta"}
+                    required
+                    error={errors.telepon}
+                    icon={<Phone className="size-4" />}
+                  >
                     <input
                       type="tel"
                       value={form.telepon}
@@ -862,7 +969,12 @@ function RegistrationFormInner() {
                       className={inputClass(!!errors.telepon)}
                     />
                   </Field>
-                  <Field label={isTim ? "Email Ketua Tim" : "Email Peserta"} required error={errors.email} icon={<Mail className="size-4" />}>
+                  <Field
+                    label={isTim ? "Email Ketua Tim" : "Email Peserta"}
+                    required
+                    error={errors.email}
+                    icon={<Mail className="size-4" />}
+                  >
                     <input
                       type="email"
                       value={form.email}
@@ -873,6 +985,7 @@ function RegistrationFormInner() {
                   </Field>
                 </div>
 
+                {/* Pakta Integritas */}
                 <div data-error={!!errors.pakta}>
                   <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-secondary/40 p-4 transition-all duration-200 hover:border-primary/30 hover:bg-secondary/60 hover:shadow-sm">
                     <button
@@ -1000,13 +1113,23 @@ function RegistrationFormInner() {
                     >
                       <div className="mb-3 flex items-center gap-3">
                         <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-background p-1.5">
-                          <Image src={b.logo} alt={`Logo ${b.bank}`} width={40} height={40} className="size-full object-contain" />
+                          <Image
+                            src={b.logo}
+                            alt={`Logo ${b.bank}`}
+                            width={40}
+                            height={40}
+                            className="size-full object-contain"
+                          />
                         </div>
                         <p className="font-heading text-lg font-bold text-foreground">{b.bank}</p>
                       </div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Nomor Rekening</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Nomor Rekening
+                      </p>
                       <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-secondary/60 px-3 py-2">
-                        <span className="font-mono text-base font-semibold tracking-wide text-foreground">{b.norek}</span>
+                        <span className="font-mono text-base font-semibold tracking-wide text-foreground">
+                          {b.norek}
+                        </span>
                         <button
                           type="button"
                           onClick={() => copyNorek(b.key, b.norek)}
@@ -1069,7 +1192,13 @@ function RegistrationFormInner() {
                 title="Review & Konfirmasi"
                 description="Periksa kembali seluruh data dan berkas yang telah diisi. Klik nama berkas untuk membukanya sebelum mengirim pendaftaran."
               >
-                <ReviewSummary form={form} files={files} kategoriConfig={kategoriConfig} isTim={isTim} onEditStep={goTo} />
+                <ReviewSummary
+                  form={form}
+                  files={files}
+                  kategoriConfig={kategoriConfig}
+                  isTim={isTim}
+                  onEditStep={goTo}
+                />
               </Section>
 
               {submitError && (
@@ -1079,7 +1208,12 @@ function RegistrationFormInner() {
               )}
 
               <div className="flex flex-col gap-3 sm:flex-row">
-                <button type="button" onClick={() => goTo(2)} className={cn(ghostBtn, "min-w-0 flex-1")} disabled={submitting}>
+                <button
+                  type="button"
+                  onClick={() => goTo(2)}
+                  className={cn(ghostBtn, "min-w-0 flex-1")}
+                  disabled={submitting}
+                >
                   <ArrowLeft className="size-5 shrink-0 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true" />
                   Kembali
                 </button>
@@ -1111,7 +1245,7 @@ function RegistrationFormInner() {
         href={`https://wa.me/${contact.whatsapp}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-2 flex items-center justify-center gap-1.5 text-sm font-semibold text-white transition-transform duration-200 hover:scale-105 hover:text-accent hover:underline"
+        className="mt-2 flex items-center justify-center gap-1.5 text-sm font-semibold text-white hover:text-accent hover:underline"
       >
         <MessageCircle className="size-4" aria-hidden="true" />
         {contact.nama} (+{contact.whatsapp})
@@ -1120,6 +1254,9 @@ function RegistrationFormInner() {
   )
 }
 
+/* ---------- Sub-komponen ---------- */
+
+/** Halaman fallback kalau form dibuka tanpa parameter ?kategori= dari Google Sites. */
 function KategoriPicker({ onPick }: { onPick: (value: Exclude<KategoriValue, "">) => void }) {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 md:py-16">
@@ -1137,16 +1274,18 @@ function KategoriPicker({ onPick }: { onPick: (value: Exclude<KategoriValue, "">
               key={k.value}
               type="button"
               onClick={() => onPick(k.value)}
-              className="group flex items-center gap-4 rounded-2xl border border-input bg-background p-4 text-left transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:bg-secondary/40 hover:shadow-lg hover:shadow-primary/10 active:translate-y-0"
+              className="group flex items-center gap-4 rounded-2xl border border-input bg-background p-4 text-left transition-all hover:border-primary/40 hover:bg-secondary/40"
             >
-              <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary transition-transform duration-300 group-hover:scale-110">{k.icon}</span>
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
+                {k.icon}
+              </span>
               <span className="flex-1">
                 <span className="block font-heading text-base font-bold text-foreground">
                   {k.code} — {k.label}
                 </span>
                 <span className="block text-xs text-muted-foreground">{k.desc}</span>
               </span>
-              <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-all duration-300 group-hover:translate-x-1 group-hover:text-primary" aria-hidden="true" />
+              <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             </button>
           ))}
         </div>
@@ -1204,6 +1343,17 @@ type BatchStatus =
   | { state: "upcoming"; text: string; batchLabel: string }
   | { state: "closed"; text: string }
 
+/**
+ * Cek batch mana (kalau ada) yang sedang aktif untuk waktu sekarang, update
+ * tiap detik. Kalau tidak sedang di batch manapun tapi masih ada batch yang
+ * akan datang -> "upcoming". Kalau semua batch sudah lewat -> "closed".
+ *
+ * PENTING: hook ini (dan hook di dalamnya, useState/useEffect) HARUS selalu
+ * dipanggil di komponen pemanggil secara tanpa syarat / tidak boleh berada
+ * setelah early return apa pun. Kalau perlu dipakai dengan kondisi "belum
+ * ada kategori", kirim array batch kosong ([]) — bukan skip pemanggilan
+ * hook-nya.
+ */
 function useBatchStatus(batches: Batch[]): BatchStatus {
   const [now, setNow] = useState(() => Date.now())
 
@@ -1229,6 +1379,11 @@ function useBatchStatus(batches: Batch[]): BatchStatus {
   return { state: "closed", text: "Pendaftaran ditutup" }
 }
 
+/**
+ * Ring progress kelengkapan pengisian form — ditaruh di pojok kanan header,
+ * warna aksen emas di atas latar ungu biar kontras & langsung kebaca tanpa
+ * perlu dibaca teksnya. Persentase dihitung lewat calculateProgress().
+ */
 function ProgressRing({ percent }: { percent: number }) {
   const size = 68
   const stroke = 6
@@ -1242,7 +1397,14 @@ function ProgressRing({ percent }: { percent: number }) {
     <div className="flex shrink-0 flex-col items-center gap-1.5">
       <div className="relative flex items-center justify-center drop-shadow-[0_2px_10px_rgba(0,0,0,0.18)]">
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth={stroke} />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="rgba(255,255,255,0.2)"
+            strokeWidth={stroke}
+          />
           <circle
             cx={size / 2}
             cy={size / 2}
@@ -1291,11 +1453,18 @@ function Stepper({ current }: { current: number }) {
                 >
                   {done ? <Check className="size-4" aria-hidden="true" /> : i + 1}
                 </span>
-                <span className={cn("hidden text-xs font-semibold sm:inline", active ? "text-foreground" : "text-muted-foreground")}>
+                <span
+                  className={cn(
+                    "hidden text-xs font-semibold sm:inline",
+                    active ? "text-foreground" : "text-muted-foreground",
+                  )}
+                >
                   {label}
                 </span>
               </div>
-              {i < steps.length - 1 && <span className={cn("mx-2 h-0.5 flex-1 rounded-full", done ? "bg-primary" : "bg-border")} />}
+              {i < steps.length - 1 && (
+                <span className={cn("mx-2 h-0.5 flex-1 rounded-full", done ? "bg-primary" : "bg-border")} />
+              )}
             </li>
           )
         })}
@@ -1348,11 +1517,19 @@ function MultiFileField({
       {files.length > 0 && (
         <ul className="space-y-2">
           {files.map((file, i) => (
-            <li key={file.id} className="flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 px-4 py-2.5 transition-all duration-200 hover:border-primary/60 hover:bg-primary/10 hover:shadow-sm">
+            <li
+              key={file.id}
+              className="flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 px-4 py-2.5"
+            >
               <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                {file.uploading ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <ImageIcon className="size-4" aria-hidden="true" />}
+                {file.uploading ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <ImageIcon className="size-4" aria-hidden="true" />
+                )}
               </span>
               <span className="min-w-0 flex-1">
+                {/* Klik nama file untuk buka & cek langsung berkas yang sudah terunggah. */}
                 {file.url ? (
                   <a
                     href={file.url}
@@ -1367,14 +1544,16 @@ function MultiFileField({
                   <span className="block truncate text-sm font-medium text-foreground">{file.name}</span>
                 )}
                 <span className="block text-xs text-muted-foreground">
-                  {file.uploading ? "Mengunggah…" : `${(file.size / 1024).toFixed(0)} KB · Tersimpan. Klik nama berkas untuk memeriksa.`}
+                  {file.uploading
+                    ? "Mengunggah…"
+                    : `${(file.size / 1024).toFixed(0)} KB · Tersimpan. Klik nama berkas untuk memeriksa.`}
                 </span>
               </span>
               <button
                 type="button"
                 onClick={() => onRemove(i)}
                 aria-label={`Hapus ${file.name}`}
-                className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-all duration-150 hover:scale-110 hover:bg-destructive/10 hover:text-destructive active:scale-95"
+                className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
               >
                 <X className="size-4" aria-hidden="true" />
               </button>
@@ -1388,18 +1567,22 @@ function MultiFileField({
           type="button"
           onClick={() => inputRef.current?.click()}
           className={cn(
-            "group flex w-full items-center gap-3 rounded-xl border border-dashed bg-background px-4 py-3 text-left transition-all duration-200",
+            "flex w-full items-center gap-3 rounded-xl border border-dashed bg-background px-4 py-3 text-left transition-colors",
             error
               ? "border-destructive ring-2 ring-destructive/20"
-              : "border-input hover:-translate-y-0.5 hover:border-primary/50 hover:bg-secondary/40 hover:shadow-md active:translate-y-0",
+              : "border-input hover:border-primary/50 hover:bg-secondary/40",
           )}
         >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary transition-transform duration-200 group-hover:scale-110">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary">
             {files.length > 0 ? <Plus className="size-4" aria-hidden="true" /> : <Upload className="size-4" aria-hidden="true" />}
           </span>
           <span>
-            <span className="block text-sm font-medium text-foreground">{files.length > 0 ? "Tambah file lagi" : "Pilih file"}</span>
-            <span className="block text-xs text-muted-foreground">{hint} Anda dapat memilih beberapa berkas sekaligus.</span>
+            <span className="block text-sm font-medium text-foreground">
+              {files.length > 0 ? "Tambah file lagi" : "Pilih file"}
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              {hint} Anda dapat memilih beberapa berkas sekaligus.
+            </span>
           </span>
         </button>
       ) : (
@@ -1413,6 +1596,8 @@ function MultiFileField({
     </div>
   )
 }
+
+/* ---------- Halaman Review ---------- */
 
 function ReviewSummary({
   form,
@@ -1447,9 +1632,13 @@ function ReviewSummary({
         <div className="space-y-4">
           <ReviewFileGroup label="Bukti Follow Instagram" files={files.followIg} />
           <ReviewFileGroup label="Scan KTM / Surat Keterangan Mahasiswa Aktif" files={files.ktm} />
-          {kategoriConfig.butuhFotoDiri && <ReviewFileGroup label="Foto Diri Masing-Masing Anggota" files={files.fotoDiri} />}
+          {kategoriConfig.butuhFotoDiri && (
+            <ReviewFileGroup label="Foto Diri Masing-Masing Anggota" files={files.fotoDiri} />
+          )}
           <ReviewFileGroup label="Bukti Upload Twibbon" files={files.twibbon} />
-          {kategoriConfig.butuhPosterIg && <ReviewFileGroup label="Bukti Upload Poster ke IG Story" files={files.posterIg} />}
+          {kategoriConfig.butuhPosterIg && (
+            <ReviewFileGroup label="Bukti Upload Poster ke IG Story" files={files.posterIg} />
+          )}
         </div>
       </ReviewBlock>
 
@@ -1497,7 +1686,10 @@ function ReviewFileGroup({ label, files }: { label: string; files: FileSlot[] })
       ) : (
         <ul className="space-y-1.5">
           {files.map((file) => (
-            <li key={file.id} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2">
+            <li
+              key={file.id}
+              className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2"
+            >
               <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
               {file.url ? (
                 <a
@@ -1541,14 +1733,18 @@ function SuccessScreen({
             <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-primary-foreground/15">
               <CheckCircle2 className="size-9 text-primary-foreground" aria-hidden="true" />
             </div>
-            <h1 className="font-heading text-2xl font-bold text-primary-foreground text-balance">Pendaftaran Terkirim!</h1>
+            <h1 className="font-heading text-2xl font-bold text-primary-foreground text-balance">
+              Pendaftaran Terkirim!
+            </h1>
           </div>
         </div>
         <div className="px-8 py-8">
           <p className="text-center text-pretty leading-relaxed text-muted-foreground">
             Terima kasih,{" "}
-            <span className="font-semibold text-foreground">{isTim && form.namaTim ? `tim ${form.namaTim}` : form.ketua}</span>. Pendaftaran
-            Anda untuk lomba{" "}
+            <span className="font-semibold text-foreground">
+              {isTim && form.namaTim ? `tim ${form.namaTim}` : form.ketua}
+            </span>
+            . Pendaftaran Anda untuk lomba{" "}
             <span className="font-semibold text-foreground">
               {kategoriConfig.code} — {kategoriConfig.label}
             </span>{" "}
@@ -1575,14 +1771,14 @@ function SuccessScreen({
           <div className="mt-6 rounded-2xl border border-primary/30 bg-primary/5 p-5 text-center">
             <p className="text-sm font-semibold text-foreground">Langkah Selanjutnya</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Klik tombol di bawah untuk lanjut ke info resmi {kategoriConfig.code} — informasi teknis dan update lomba akan dibagikan di
-              sana.
+              Klik tombol di bawah untuk lanjut ke info resmi {kategoriConfig.code} — informasi teknis dan update
+              lomba akan dibagikan di sana.
             </p>
             <a
               href={KATEGORI_LINK[kategoriConfig.value]}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/40 hover:brightness-110 active:translate-y-0"
+              className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:brightness-110"
             >
               <ExternalLink className="size-4" aria-hidden="true" />
               Lanjut ke Info {kategoriConfig.code}
@@ -1593,7 +1789,7 @@ function SuccessScreen({
             <button
               type="button"
               onClick={onReset}
-              className="inline-flex w-full items-center justify-center rounded-xl bg-secondary px-6 py-3 font-semibold text-secondary-foreground transition-all duration-300 hover:-translate-y-0.5 hover:bg-secondary/70 hover:shadow-md active:translate-y-0"
+              className="inline-flex w-full items-center justify-center rounded-xl bg-secondary px-6 py-3 font-semibold text-secondary-foreground transition-colors hover:bg-secondary/70"
             >
               Daftar Lagi
             </button>
@@ -1602,7 +1798,7 @@ function SuccessScreen({
             href={`https://wa.me/${contact.whatsapp}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-4 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary transition-transform duration-200 hover:scale-105 hover:underline"
+            className="mt-4 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary hover:underline"
           >
             <MessageCircle className="size-4" aria-hidden="true" />
             Ada pertanyaan? Hubungi {contact.nama} (+{contact.whatsapp})
@@ -1613,6 +1809,8 @@ function SuccessScreen({
   )
 }
 
+/* ---------- Helper ---------- */
+
 const primaryBtn =
   "group flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 font-heading text-base font-bold text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/35 hover:brightness-110 active:translate-y-0 active:scale-[0.98] active:shadow-md"
 
@@ -1622,7 +1820,9 @@ const ghostBtn =
 function inputClass(hasError: boolean) {
   return cn(
     "w-full rounded-xl border bg-background px-4 py-2.5 text-sm text-foreground outline-none transition-all duration-200 placeholder:text-muted-foreground/60",
-    hasError ? "border-destructive ring-2 ring-destructive/20" : "border-input hover:border-primary/40 hover:shadow-sm focus:border-primary focus:ring-2 focus:ring-primary/20",
+    hasError
+      ? "border-destructive ring-2 ring-destructive/20"
+      : "border-input hover:border-primary/40 hover:shadow-sm focus:border-primary focus:ring-2 focus:ring-primary/20",
   )
 }
 
