@@ -20,6 +20,7 @@ import {
   BrainCircuit,
   AtSign,
   IdCard,
+  GraduationCap,
   MessageCircle,
   Image as ImageIcon,
   Palette,
@@ -64,8 +65,10 @@ type KategoriConfig = {
   icon: React.ReactNode
   /** Khusus AEC: wajib unggah bukti share poster di IG Story. */
   butuhPosterIg?: boolean
-  /** Khusus AEC & LCCA: wajib unggah foto diri masing-masing anggota. */
+  /** Khusus AEC, AICE & LCCA: wajib unggah foto diri masing-masing anggota. */
   butuhFotoDiri?: boolean
+  /** Khusus LCCA: wajib isi program studi tiap peserta (validasi linieritas jurusan). */
+  butuhProdi?: boolean
 }
 
 const kategoriList: KategoriConfig[] = [
@@ -83,8 +86,8 @@ const kategoriList: KategoriConfig[] = [
     value: "arc",
     code: "ARC",
     label: "Audit Reels Competition",
-    desc: "Kompetisi reels Instagram bertema audit — perorangan",
-    timMode: "solo",
+    desc: "Kompetisi reels Instagram bertema audit — individu atau tim, maksimal 3 orang",
+    timMode: "opsional",
     icon: <Video className="size-5" aria-hidden="true" />,
   },
   {
@@ -94,6 +97,7 @@ const kategoriList: KategoriConfig[] = [
     desc: "Kompetisi desain infografis bertema audit — perorangan",
     timMode: "solo",
     icon: <Palette className="size-5" aria-hidden="true" />,
+    butuhFotoDiri: true,
   },
   {
     value: "avoc",
@@ -111,6 +115,7 @@ const kategoriList: KategoriConfig[] = [
     timMode: "wajib",
     icon: <BrainCircuit className="size-5" aria-hidden="true" />,
     butuhFotoDiri: true,
+    butuhProdi: true,
   },
 ]
 
@@ -157,8 +162,11 @@ const KATEGORI_LINK: Record<Exclude<KategoriValue, "">, string> = {
 type FormState = {
   namaTim: string
   ketua: string
+  prodiKetua: string
   anggota1: string
+  prodiAnggota1: string
   anggota2: string
+  prodiAnggota2: string
   sekolah: string
   kota: string
   telepon: string
@@ -190,8 +198,11 @@ type FileState = {
 const initialForm: FormState = {
   namaTim: "",
   ketua: "",
+  prodiKetua: "",
   anggota1: "",
+  prodiAnggota1: "",
   anggota2: "",
+  prodiAnggota2: "",
   sekolah: "",
   kota: "",
   telepon: "",
@@ -343,6 +354,10 @@ function calculateProgress(form: FormState, files: FileState, kategoriConfig: Ka
   ]
   if (timWajib) {
     dataChecks.push(!!form.namaTim.trim(), !!form.anggota1.trim(), !!form.anggota2.trim())
+  }
+  if (kategoriConfig.butuhProdi) {
+    dataChecks.push(!!form.prodiKetua.trim())
+    if (timWajib) dataChecks.push(!!form.prodiAnggota1.trim(), !!form.prodiAnggota2.trim())
   }
 
   const fileChecks: boolean[] = [
@@ -574,8 +589,14 @@ function RegistrationFormInner() {
     const next: Record<string, string> = {}
     if (timWajib && !form.namaTim.trim()) next.namaTim = "Nama tim wajib diisi"
     if (!form.ketua.trim()) next.ketua = isTim ? "Nama ketua tim wajib diisi" : "Nama peserta wajib diisi"
+    if (kategoriConfig?.butuhProdi && !form.prodiKetua.trim())
+      next.prodiKetua = isTim ? "Program studi ketua tim wajib diisi" : "Program studi wajib diisi"
     if (timWajib && !form.anggota1.trim()) next.anggota1 = "Nama anggota 1 wajib diisi — tim harus terdiri dari 3 orang"
+    if (timWajib && kategoriConfig?.butuhProdi && !form.prodiAnggota1.trim())
+      next.prodiAnggota1 = "Program studi anggota 1 wajib diisi"
     if (timWajib && !form.anggota2.trim()) next.anggota2 = "Nama anggota 2 wajib diisi — tim harus terdiri dari 3 orang"
+    if (timWajib && kategoriConfig?.butuhProdi && !form.prodiAnggota2.trim())
+      next.prodiAnggota2 = "Program studi anggota 2 wajib diisi"
     if (!form.sekolah.trim()) next.sekolah = "Asal sekolah/universitas wajib diisi"
     if (!form.kota.trim()) next.kota = "Kota asal wajib diisi"
     if (!form.telepon.trim()) next.telepon = "Nomor telepon wajib diisi"
@@ -685,8 +706,11 @@ function RegistrationFormInner() {
           kategori: kategoriConfig.value,
           namaTim: form.namaTim,
           ketua: form.ketua,
+          prodiKetua: form.prodiKetua,
           anggota1: form.anggota1,
+          prodiAnggota1: form.prodiAnggota1,
           anggota2: form.anggota2,
+          prodiAnggota2: form.prodiAnggota2,
           sekolah: form.sekolah,
           kota: form.kota,
           telepon: form.telepon,
@@ -869,20 +893,53 @@ function RegistrationFormInner() {
                   </Field>
                 )}
 
-                <Field
-                  label={isTim ? "Nama Ketua Tim/Peserta" : "Nama Lengkap Peserta"}
-                  required
-                  error={errors.ketua}
-                  icon={<User className="size-4" />}
-                >
-                  <input
-                    type="text"
-                    value={form.ketua}
-                    onChange={(e) => update("ketua", e.target.value)}
-                    placeholder={isTim ? "Nama lengkap ketua tim" : "Nama lengkap Anda"}
-                    className={inputClass(!!errors.ketua)}
-                  />
-                </Field>
+                {kategoriConfig.butuhProdi ? (
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field
+                      label={isTim ? "Nama Ketua Tim/Peserta" : "Nama Lengkap Peserta"}
+                      required
+                      error={errors.ketua}
+                      icon={<User className="size-4" />}
+                    >
+                      <input
+                        type="text"
+                        value={form.ketua}
+                        onChange={(e) => update("ketua", e.target.value)}
+                        placeholder={isTim ? "Nama lengkap ketua tim" : "Nama lengkap Anda"}
+                        className={inputClass(!!errors.ketua)}
+                      />
+                    </Field>
+                    <Field
+                      label={isTim ? "Program Studi Ketua Tim" : "Program Studi"}
+                      required
+                      error={errors.prodiKetua}
+                      icon={<GraduationCap className="size-4" />}
+                    >
+                      <input
+                        type="text"
+                        value={form.prodiKetua}
+                        onChange={(e) => update("prodiKetua", e.target.value)}
+                        placeholder="Contoh: Akuntansi"
+                        className={inputClass(!!errors.prodiKetua)}
+                      />
+                    </Field>
+                  </div>
+                ) : (
+                  <Field
+                    label={isTim ? "Nama Ketua Tim/Peserta" : "Nama Lengkap Peserta"}
+                    required
+                    error={errors.ketua}
+                    icon={<User className="size-4" />}
+                  >
+                    <input
+                      type="text"
+                      value={form.ketua}
+                      onChange={(e) => update("ketua", e.target.value)}
+                      placeholder={isTim ? "Nama lengkap ketua tim" : "Nama lengkap Anda"}
+                      className={inputClass(!!errors.ketua)}
+                    />
+                  </Field>
+                )}
 
                 {isTim && (
                   <div className="rounded-2xl border border-dashed border-border bg-secondary/40 p-4 transition-colors duration-200 hover:border-primary/30">
@@ -893,34 +950,70 @@ function RegistrationFormInner() {
                         : "Jumlah anggota tim bersifat opsional, terdiri atas 1 hingga 3 orang termasuk ketua."}
                     </p>
                     <div className="grid gap-4 md:grid-cols-2">
-                      <Field
-                        label="Nama Anggota 1"
-                        required={timWajib}
-                        error={errors.anggota1}
-                        icon={<User className="size-4" />}
-                      >
-                        <input
-                          type="text"
-                          value={form.anggota1}
-                          onChange={(e) => update("anggota1", e.target.value)}
-                          placeholder={timWajib ? "Nama lengkap anggota 1" : "Opsional"}
-                          className={inputClass(!!errors.anggota1)}
-                        />
-                      </Field>
-                      <Field
-                        label="Nama Anggota 2"
-                        required={timWajib}
-                        error={errors.anggota2}
-                        icon={<User className="size-4" />}
-                      >
-                        <input
-                          type="text"
-                          value={form.anggota2}
-                          onChange={(e) => update("anggota2", e.target.value)}
-                          placeholder={timWajib ? "Nama lengkap anggota 2" : "Opsional"}
-                          className={inputClass(!!errors.anggota2)}
-                        />
-                      </Field>
+                      <div className="space-y-4">
+                        <Field
+                          label="Nama Anggota 1"
+                          required={timWajib}
+                          error={errors.anggota1}
+                          icon={<User className="size-4" />}
+                        >
+                          <input
+                            type="text"
+                            value={form.anggota1}
+                            onChange={(e) => update("anggota1", e.target.value)}
+                            placeholder={timWajib ? "Nama lengkap anggota 1" : "Opsional"}
+                            className={inputClass(!!errors.anggota1)}
+                          />
+                        </Field>
+                        {kategoriConfig.butuhProdi && (
+                          <Field
+                            label="Program Studi Anggota 1"
+                            required={timWajib}
+                            error={errors.prodiAnggota1}
+                            icon={<GraduationCap className="size-4" />}
+                          >
+                            <input
+                              type="text"
+                              value={form.prodiAnggota1}
+                              onChange={(e) => update("prodiAnggota1", e.target.value)}
+                              placeholder="Contoh: Akuntansi"
+                              className={inputClass(!!errors.prodiAnggota1)}
+                            />
+                          </Field>
+                        )}
+                      </div>
+                      <div className="space-y-4">
+                        <Field
+                          label="Nama Anggota 2"
+                          required={timWajib}
+                          error={errors.anggota2}
+                          icon={<User className="size-4" />}
+                        >
+                          <input
+                            type="text"
+                            value={form.anggota2}
+                            onChange={(e) => update("anggota2", e.target.value)}
+                            placeholder={timWajib ? "Nama lengkap anggota 2" : "Opsional"}
+                            className={inputClass(!!errors.anggota2)}
+                          />
+                        </Field>
+                        {kategoriConfig.butuhProdi && (
+                          <Field
+                            label="Program Studi Anggota 2"
+                            required={timWajib}
+                            error={errors.prodiAnggota2}
+                            icon={<GraduationCap className="size-4" />}
+                          >
+                            <input
+                              type="text"
+                              value={form.prodiAnggota2}
+                              onChange={(e) => update("prodiAnggota2", e.target.value)}
+                              placeholder="Contoh: Akuntansi"
+                              className={inputClass(!!errors.prodiAnggota2)}
+                            />
+                          </Field>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1629,8 +1722,13 @@ function ReviewSummary({
         <dl className="space-y-2 text-sm">
           {isTim && form.namaTim && <ReviewRow label="Nama Tim" value={form.namaTim} />}
           <ReviewRow label={isTim ? "Ketua Tim/Peserta" : "Nama Peserta"} value={form.ketua} />
+          {form.prodiKetua && (
+            <ReviewRow label={isTim ? "Program Studi Ketua" : "Program Studi"} value={form.prodiKetua} />
+          )}
           {form.anggota1 && <ReviewRow label="Anggota 1" value={form.anggota1} />}
+          {form.prodiAnggota1 && <ReviewRow label="Program Studi Anggota 1" value={form.prodiAnggota1} />}
           {form.anggota2 && <ReviewRow label="Anggota 2" value={form.anggota2} />}
+          {form.prodiAnggota2 && <ReviewRow label="Program Studi Anggota 2" value={form.prodiAnggota2} />}
           <ReviewRow label="Asal Institusi" value={form.sekolah} />
           <ReviewRow label="Kota Asal" value={form.kota} />
           <ReviewRow label="No. Telepon" value={form.telepon} />
