@@ -1467,9 +1467,21 @@ function useBatchStatus(batches: Batch[]): BatchStatus {
  * warna aksen emas di atas latar ungu biar kontras & langsung kebaca tanpa
  * perlu dibaca teksnya. Persentase dihitung lewat calculateProgress().
  */
+/**
+ * Interpolasi warna merah -> kuning -> hijau berdasarkan persentase (0-100),
+ * dipakai supaya ProgressRing kerasa "hidup": makin jauh dari selesai makin
+ * merah/mendesak, makin dekat selesai makin hijau/aman — bukan warna solid
+ * yang monoton di semua persentase.
+ */
+function progressColor(percent: number) {
+  const clamped = Math.min(100, Math.max(0, percent))
+  const hue = (clamped / 100) * 142 // 0 = merah, 142 = hijau
+  return `hsl(${hue}, 78%, 52%)`
+}
+
 function ProgressRing({ percent }: { percent: number }) {
-  const size = 68
-  const stroke = 6
+  const size = 80
+  const stroke = 7
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
   const clamped = Math.min(100, Math.max(0, Math.round(percent)))
@@ -1498,23 +1510,23 @@ function ProgressRing({ percent }: { percent: number }) {
             cy={size / 2}
             r={radius}
             fill="none"
-            stroke={isDone ? "#ffffff" : "var(--accent)"}
+            stroke={isDone ? "#ffffff" : progressColor(clamped)}
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
-            className="transition-[stroke-dashoffset] duration-700 ease-out"
+            style={{ transition: "stroke-dashoffset 700ms ease-out, stroke 400ms ease" }}
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
           {isDone ? (
-            <Check className="size-6 text-primary-foreground" aria-hidden="true" />
+            <Check className="size-7 text-primary-foreground" aria-hidden="true" />
           ) : (
-            <span className="font-heading text-base font-bold text-primary-foreground">{clamped}%</span>
+            <span className="font-heading text-lg font-bold text-primary-foreground">{clamped}%</span>
           )}
         </div>
       </div>
-      <span className="hidden text-[10px] font-semibold uppercase tracking-wider text-primary-foreground/70 sm:block">
+      <span className="hidden text-xs font-semibold uppercase tracking-wider text-primary-foreground/70 sm:block">
         {isDone ? "Lengkap" : "Progres"}
       </span>
     </div>
