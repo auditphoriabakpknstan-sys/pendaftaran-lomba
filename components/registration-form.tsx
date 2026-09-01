@@ -1473,10 +1473,38 @@ function useBatchStatus(batches: Batch[]): BatchStatus {
  * merah/mendesak, makin dekat selesai makin hijau/aman — bukan warna solid
  * yang monoton di semua persentase.
  */
+/**
+ * Palet 6-stop merah -> oranye -> kuning -> kuning terang -> hijau -> hijau
+ * terang, diinterpolasi linear per-channel RGB antar dua stop terdekat
+ * supaya transisinya halus (bukan cuma satu hue yang diputar).
+ */
+const PROGRESS_COLOR_STOPS: [number, [number, number, number]][] = [
+  [0, [239, 68, 68]], // merah
+  [20, [249, 115, 22]], // oranye
+  [40, [234, 179, 8]], // kuning
+  [60, [253, 224, 71]], // kuning terang
+  [80, [34, 197, 94]], // hijau
+  [100, [74, 222, 128]], // hijau terang
+]
+
 function progressColor(percent: number) {
   const clamped = Math.min(100, Math.max(0, percent))
-  const hue = (clamped / 100) * 142 // 0 = merah, 142 = hijau
-  return `hsl(${hue}, 78%, 52%)`
+  let lower = PROGRESS_COLOR_STOPS[0]
+  let upper = PROGRESS_COLOR_STOPS[PROGRESS_COLOR_STOPS.length - 1]
+  for (let i = 0; i < PROGRESS_COLOR_STOPS.length - 1; i++) {
+    if (clamped >= PROGRESS_COLOR_STOPS[i][0] && clamped <= PROGRESS_COLOR_STOPS[i + 1][0]) {
+      lower = PROGRESS_COLOR_STOPS[i]
+      upper = PROGRESS_COLOR_STOPS[i + 1]
+      break
+    }
+  }
+  const [lowerPct, lowerRgb] = lower
+  const [upperPct, upperRgb] = upper
+  const t = (clamped - lowerPct) / (upperPct - lowerPct || 1)
+  const r = Math.round(lowerRgb[0] + (upperRgb[0] - lowerRgb[0]) * t)
+  const g = Math.round(lowerRgb[1] + (upperRgb[1] - lowerRgb[1]) * t)
+  const b = Math.round(lowerRgb[2] + (upperRgb[2] - lowerRgb[2]) * t)
+  return `rgb(${r}, ${g}, ${b})`
 }
 
 function ProgressRing({ percent }: { percent: number }) {
