@@ -860,7 +860,7 @@ function RegistrationFormInner() {
               </div>
             </div>
 
-            <div className="flex shrink-0 items-start gap-4">
+            <div className="flex shrink-0 items-end gap-4">
               <a
                 href={KATEGORI_HANDBOOK[kategoriConfig.value]}
                 target="_blank"
