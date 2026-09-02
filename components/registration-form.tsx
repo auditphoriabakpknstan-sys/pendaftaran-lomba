@@ -501,6 +501,23 @@ function RegistrationFormInner() {
   const [draftRestored, setDraftRestored] = useState(false)
   const formLoadedAt = useRef(Date.now())
   const submittingRef = useRef(false)
+  const headerRef = useRef<HTMLElement>(null)
+  const [showCompactBar, setShowCompactBar] = useState(false)
+
+  // Pantau posisi header asli — begitu header (yang berisi Progress ring &
+  // tombol Handbook ukuran penuh) sudah lewat dari layar, munculkan bar
+  // ringkas yang nempel di atas supaya kedua info itu tetap kelihatan tanpa
+  // harus freeze seluruh header (yang makan banyak ruang layar di HP).
+  useEffect(() => {
+    function handleScroll() {
+      if (!headerRef.current) return
+      const rect = headerRef.current.getBoundingClientRect()
+      setShowCompactBar(rect.bottom < 0)
+    }
+    handleScroll()
+    window.addEventListener("scroll", handleScroll, { passive: true })
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [])
 
   // Hook batch status dipanggil TANPA SYARAT di sini (sebelum early return
   // apa pun) supaya urutan Hooks React selalu konsisten di setiap render.
@@ -811,7 +828,44 @@ function RegistrationFormInner() {
   const progress = calculateProgress(form, files, kategoriConfig)
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10 md:py-16">
+    <>
+      {/* Bar ringkas sticky — hanya muncul setelah header asli discroll
+          lewat, isinya cuma Handbook & Progress supaya keduanya tetap
+          kelihatan tanpa freeze seluruh header. */}
+      <div
+        className={cn(
+          "pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-3 transition-all duration-300",
+          showCompactBar ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0",
+        )}
+      >
+        <div className="pointer-events-auto flex w-full max-w-2xl items-center justify-between gap-3 rounded-2xl border border-primary-foreground/10 bg-primary px-4 py-2.5 shadow-lg shadow-black/25">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+              {kategoriConfig.icon}
+            </div>
+            <span className="truncate font-heading text-sm font-bold text-primary-foreground">
+              {kategoriConfig.code}
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              href={KATEGORI_HANDBOOK[kategoriConfig.value]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2.5 py-1.5 text-xs font-semibold text-primary-foreground transition-colors duration-200 hover:bg-primary-foreground/20"
+            >
+              <BookOpen className="size-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Handbook</span>
+            </a>
+            <div className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2.5 py-1.5 text-xs font-semibold text-primary-foreground">
+              <MiniProgressRing percent={progress} />
+              <span>{progress}%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-2xl px-4 py-10 md:py-16">
       {draftRestored && step === 0 && (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-card/95 p-4 shadow-lg shadow-black/20 backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-300">
           <p className="text-sm text-foreground">
@@ -830,7 +884,7 @@ function RegistrationFormInner() {
       )}
       <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-xl shadow-primary/5">
         {/* Header */}
-        <header className="relative overflow-hidden bg-primary px-6 py-8 md:px-10">
+        <header ref={headerRef} className="relative overflow-hidden bg-primary px-6 py-8 md:px-10">
           <div className="absolute -right-8 -top-8 size-40 rounded-full bg-primary-foreground/10" aria-hidden="true" />
           <div className="absolute -bottom-12 -left-6 size-40 rounded-full bg-accent/20" aria-hidden="true" />
           <div className="relative flex items-center justify-between gap-4">
@@ -1376,7 +1430,8 @@ function RegistrationFormInner() {
         <MessageCircle className="size-4" aria-hidden="true" />
         {contact.nama} (+{contact.whatsapp})
       </a>
-    </div>
+      </div>
+    </>
   )
 }
 
@@ -1541,6 +1596,38 @@ function progressColor(percent: number) {
   const g = Math.round(lowerRgb[1] + (upperRgb[1] - lowerRgb[1]) * t)
   const b = Math.round(lowerRgb[2] + (upperRgb[2] - lowerRgb[2]) * t)
   return `rgb(${r}, ${g}, ${b})`
+}
+
+/**
+ * Versi ring progress ukuran mini tanpa label, dipakai di compact bar
+ * sticky yang muncul setelah header asli discroll lewat.
+ */
+function MiniProgressRing({ percent }: { percent: number }) {
+  const size = 22
+  const stroke = 3
+  const radius = (size - stroke) / 2
+  const circumference = 2 * Math.PI * radius
+  const clamped = Math.min(100, Math.max(0, Math.round(percent)))
+  const offset = circumference - (clamped / 100) * circumference
+  const isDone = clamped >= 100
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90 shrink-0">
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth={stroke} />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke={isDone ? "#ffffff" : progressColor(clamped)}
+        strokeWidth={stroke}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        style={{ transition: "stroke-dashoffset 700ms ease-out, stroke 400ms ease" }}
+      />
+    </svg>
+  )
 }
 
 function ProgressRing({ percent }: { percent: number }) {
