@@ -39,21 +39,6 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-/* =========================================================================
- * KONFIGURASI CABANG LOMBA
- * =========================================================================
- * Ubah/tambah lomba dari SATU tempat ini. Setiap lomba (kategori) punya:
- * - timMode: "solo" (perorangan saja) | "opsional" (boleh sendiri/tim) | "wajib" (harus tim)
- * - butuhPosterIg: khusus AEC — wajib unggah bukti share poster di IG Story
- * - butuhFotoDiri: khusus AEC & LCCA — wajib unggah foto diri tiap anggota
- *
- * CATATAN REVISI: Berkas/link karya (upload essay/abstrak, link reels IG,
- * infografis, audio voice over) DIHAPUS TOTAL dari form pendaftaran ini.
- * Berkas umum yang WAJIB untuk SEMUA kategori: Bukti Follow IG, KTM,
- * Bukti Upload Twibbon, Bukti Pembayaran. Di luar itu ada dua berkas
- * tambahan yang hanya wajib untuk kategori tertentu (lihat flag di atas).
- * ========================================================================= */
-
 type KategoriValue = "aec" | "arc" | "aice" | "avoc" | "lcca" | ""
 type TimMode = "solo" | "opsional" | "wajib"
 
@@ -302,10 +287,6 @@ const BANKS = [
 const DRAFT_STORAGE_KEY = "auditphoria-form-draft"
 const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000 // draft basi setelah 24 jam
 
-// File diunggah ke Vercel Blob dulu begitu dipilih, baru dipindah ke Drive
-// lewat Apps Script secara server-ke-server saat submit, supaya tidak kena
-// limit ukuran request 4.5MB milik Vercel Functions maupun isu CORS Apps
-// Script.
 async function uploadFileToBlob(field: string, file: File, referenceId: string): Promise<string> {
   const { upload } = await import("@vercel/blob/client")
   const blob = await upload(`pendaftaran/${referenceId}/${field}-${Date.now()}-${file.name}`, file, {
@@ -353,10 +334,6 @@ function hasPendingUploads(files: FileState) {
   )
 }
 
-/**
- * Hitung persentase kelengkapan pengisian form (data + berkas wajib sesuai
- * kategori). Dipakai untuk banner "progres dipulihkan".
- */
 function calculateProgress(form: FormState, files: FileState, kategoriConfig: KategoriConfig | null): number {
   if (!kategoriConfig) return 0
   const timWajib = kategoriConfig.timMode === "wajib"
@@ -456,10 +433,6 @@ function clearDraft(kategori: KategoriValue) {
   }
 }
 
-/**
- * Wrapper luar: baca parameter URL (?kategori=aec dst) di dalam Suspense,
- * seperti disyaratkan Next.js untuk useSearchParams pada Client Component.
- */
 export function RegistrationForm() {
   return (
     <Suspense fallback={<FormSkeleton />}>
@@ -479,9 +452,6 @@ function FormSkeleton() {
 function RegistrationFormInner() {
   const searchParams = useSearchParams()
 
-  // Kategori diambil dari URL (?kategori=aec) — dikunci, TIDAK bisa diganti manual dari
-  // dalam form. Kalau parameter tidak ada / tidak valid, tampilkan halaman pilih lomba
-  // manual sebagai fallback supaya link lama / akses langsung tetap bisa dipakai.
   const kategoriFromUrl = (searchParams.get("kategori") || "").toLowerCase()
   const lockedKategori: KategoriValue = CODE_TO_VALUE[kategoriFromUrl] ?? ""
   const [manualKategori, setManualKategori] = useState<KategoriValue>("")
@@ -504,10 +474,6 @@ function RegistrationFormInner() {
   const headerRef = useRef<HTMLElement>(null)
   const [showCompactBar, setShowCompactBar] = useState(false)
 
-  // Pantau posisi header asli — begitu header (yang berisi Progress ring &
-  // tombol Handbook ukuran penuh) sudah lewat dari layar, munculkan bar
-  // ringkas yang nempel di atas supaya kedua info itu tetap kelihatan tanpa
-  // harus freeze seluruh header (yang makan banyak ruang layar di HP).
   useEffect(() => {
     function handleScroll() {
       if (!headerRef.current) return
@@ -519,12 +485,8 @@ function RegistrationFormInner() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
-  // Hook batch status dipanggil TANPA SYARAT di sini (sebelum early return
-  // apa pun) supaya urutan Hooks React selalu konsisten di setiap render.
   const batchStatus = useBatchStatus(kategoriConfig ? kategoriBatches[kategoriConfig.value] : [])
 
-  // Pulihkan draft (kalau ada & belum basi) — HANYA di client, supaya tidak
-  // bentrok dengan hasil render server (hydration).
   useEffect(() => {
     if (!activeKategori) return
     const draft = loadDraft(activeKategori)
@@ -539,7 +501,6 @@ function RegistrationFormInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKategori])
 
-  // Simpan draft setiap kali data berubah
   useEffect(() => {
     if (!activeKategori) return
     const isEmpty =
