@@ -20,6 +20,7 @@ import {
   BrainCircuit,
   AtSign,
   IdCard,
+  GraduationCap,
   MessageCircle,
   Image as ImageIcon,
   Palette,
@@ -64,8 +65,10 @@ type KategoriConfig = {
   icon: React.ReactNode
   /** Khusus AEC: wajib unggah bukti share poster di IG Story. */
   butuhPosterIg?: boolean
-  /** Khusus AEC & LCCA: wajib unggah foto diri masing-masing anggota. */
+  /** Khusus AEC, AICE & LCCA: wajib unggah foto diri masing-masing anggota. */
   butuhFotoDiri?: boolean
+  /** Khusus LCCA: wajib isi program studi tiap peserta (validasi linieritas jurusan). */
+  butuhProdi?: boolean
 }
 
 const kategoriList: KategoriConfig[] = [
@@ -83,8 +86,8 @@ const kategoriList: KategoriConfig[] = [
     value: "arc",
     code: "ARC",
     label: "Audit Reels Competition",
-    desc: "Kompetisi reels Instagram bertema audit — perorangan",
-    timMode: "solo",
+    desc: "Kompetisi reels Instagram bertema audit — individu atau tim, maksimal 3 orang",
+    timMode: "opsional",
     icon: <Video className="size-5" aria-hidden="true" />,
   },
   {
@@ -94,6 +97,7 @@ const kategoriList: KategoriConfig[] = [
     desc: "Kompetisi desain infografis bertema audit — perorangan",
     timMode: "solo",
     icon: <Palette className="size-5" aria-hidden="true" />,
+    butuhFotoDiri: true,
   },
   {
     value: "avoc",
@@ -111,6 +115,7 @@ const kategoriList: KategoriConfig[] = [
     timMode: "wajib",
     icon: <BrainCircuit className="size-5" aria-hidden="true" />,
     butuhFotoDiri: true,
+    butuhProdi: true,
   },
 ]
 
@@ -157,8 +162,11 @@ const KATEGORI_LINK: Record<Exclude<KategoriValue, "">, string> = {
 type FormState = {
   namaTim: string
   ketua: string
+  prodiKetua: string
   anggota1: string
+  prodiAnggota1: string
   anggota2: string
+  prodiAnggota2: string
   sekolah: string
   kota: string
   telepon: string
@@ -190,8 +198,11 @@ type FileState = {
 const initialForm: FormState = {
   namaTim: "",
   ketua: "",
+  prodiKetua: "",
   anggota1: "",
+  prodiAnggota1: "",
   anggota2: "",
+  prodiAnggota2: "",
   sekolah: "",
   kota: "",
   telepon: "",
@@ -210,8 +221,10 @@ const initialFiles: FileState = {
 }
 
 const MAX_BUKTI = 3
+// Follow IG kadang perlu lebih dari satu akun (misalnya follow dari akun
+// pribadi + akun organisasi/komunitas), jadi batasnya dibuat lebih longgar.
 const MAX_FOLLOW_IG = 6
-const MAX_BAYAR = 2
+const MAX_BAYAR = 5
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
 /**
@@ -344,6 +357,10 @@ function calculateProgress(form: FormState, files: FileState, kategoriConfig: Ka
   ]
   if (timWajib) {
     dataChecks.push(!!form.namaTim.trim(), !!form.anggota1.trim(), !!form.anggota2.trim())
+  }
+  if (kategoriConfig.butuhProdi) {
+    dataChecks.push(!!form.prodiKetua.trim())
+    if (timWajib) dataChecks.push(!!form.prodiAnggota1.trim(), !!form.prodiAnggota2.trim())
   }
 
   const fileChecks: boolean[] = [
@@ -575,8 +592,14 @@ function RegistrationFormInner() {
     const next: Record<string, string> = {}
     if (timWajib && !form.namaTim.trim()) next.namaTim = "Nama tim wajib diisi"
     if (!form.ketua.trim()) next.ketua = isTim ? "Nama ketua tim wajib diisi" : "Nama peserta wajib diisi"
+    if (kategoriConfig?.butuhProdi && !form.prodiKetua.trim())
+      next.prodiKetua = isTim ? "Program studi ketua tim wajib diisi" : "Program studi wajib diisi"
     if (timWajib && !form.anggota1.trim()) next.anggota1 = "Nama anggota 1 wajib diisi — tim harus terdiri dari 3 orang"
+    if (timWajib && kategoriConfig?.butuhProdi && !form.prodiAnggota1.trim())
+      next.prodiAnggota1 = "Program studi anggota 1 wajib diisi"
     if (timWajib && !form.anggota2.trim()) next.anggota2 = "Nama anggota 2 wajib diisi — tim harus terdiri dari 3 orang"
+    if (timWajib && kategoriConfig?.butuhProdi && !form.prodiAnggota2.trim())
+      next.prodiAnggota2 = "Program studi anggota 2 wajib diisi"
     if (!form.sekolah.trim()) next.sekolah = "Asal sekolah/universitas wajib diisi"
     if (!form.kota.trim()) next.kota = "Kota asal wajib diisi"
     if (!form.telepon.trim()) next.telepon = "Nomor telepon wajib diisi"
@@ -686,8 +709,11 @@ function RegistrationFormInner() {
           kategori: kategoriConfig.value,
           namaTim: form.namaTim,
           ketua: form.ketua,
+          prodiKetua: form.prodiKetua,
           anggota1: form.anggota1,
+          prodiAnggota1: form.prodiAnggota1,
           anggota2: form.anggota2,
+          prodiAnggota2: form.prodiAnggota2,
           sekolah: form.sekolah,
           kota: form.kota,
           telepon: form.telepon,
@@ -773,16 +799,16 @@ function RegistrationFormInner() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 md:py-16">
       {draftRestored && step === 0 && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-card/95 p-4 shadow-lg shadow-black/20 backdrop-blur-sm">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-card/95 p-4 shadow-lg shadow-black/20 backdrop-blur-sm animate-in fade-in slide-in-from-top-2 duration-300">
           <p className="text-sm text-foreground">
-            Progres pengisian sebelumnya untuk lomba ini berhasil dipulihkan, termasuk berkas yang sudah selesai
+            Progres pengisian sebelumnya untuk lomba ini berhasil dipulihkan, termasuk berkas yang telah selesai
             diunggah.
           </p>
           <button
             type="button"
             onClick={() => setDraftRestored(false)}
             aria-label="Tutup"
-            className="inline-flex shrink-0 items-center justify-center rounded-lg px-2 py-1.5 text-muted-foreground hover:bg-secondary"
+            className="inline-flex shrink-0 items-center justify-center rounded-lg px-2 py-1.5 text-muted-foreground transition-all duration-200 hover:scale-110 hover:bg-secondary hover:text-foreground"
           >
             <X className="size-3.5" aria-hidden="true" />
           </button>
@@ -827,16 +853,16 @@ function RegistrationFormInner() {
 
         <div className="px-6 py-8 md:px-10">
           {step === 0 && (
-            <div className="space-y-8">
+            <div className="space-y-8 animate-in fade-in duration-300">
               <Section
                 number="1"
                 title={isTim ? "Data Tim" : "Data Peserta"}
                 description={
                   timMode === "opsional"
-                    ? "Pendaftaran dapat dilakukan secara individu maupun berkelompok. Kosongkan kolom Nama Tim dan Anggota apabila mendaftar secara perorangan."
+                    ? "Peserta dapat mendaftar secara individu maupun berkelompok. Kosongkan kolom Nama Tim dan Anggota apabila mendaftar secara individu."
                     : timMode === "wajib"
-                      ? "Lomba ini wajib diikuti secara berkelompok dengan jumlah anggota tepat tiga orang (satu ketua dan dua anggota)."
-                      : "Lengkapi data diri Anda sesuai identitas resmi."
+                      ? "Lomba ini wajib diikuti secara berkelompok dengan jumlah anggota tepat 3 orang, terdiri atas 1 ketua dan 2 anggota."
+                      : "Lengkapi data diri Anda dengan benar dan sesuai identitas resmi."
                 }
               >
                 {/* Honeypot anti-bot */}
@@ -864,66 +890,133 @@ function RegistrationFormInner() {
                       type="text"
                       value={form.namaTim}
                       onChange={(e) => update("namaTim", e.target.value)}
-                      placeholder={
-                        timMode === "opsional" ? "Opsional — kosongkan apabila mendaftar secara perorangan" : "Masukkan nama tim Anda"
-                      }
+                      placeholder={timMode === "opsional" ? "Opsional — kosongkan apabila mendaftar secara individu" : "Masukkan nama tim"}
                       className={inputClass(!!errors.namaTim)}
                     />
                   </Field>
                 )}
 
-                <Field
-                  label={isTim ? "Nama Ketua Tim/Peserta" : "Nama Lengkap Peserta"}
-                  required
-                  error={errors.ketua}
-                  icon={<User className="size-4" />}
-                >
-                  <input
-                    type="text"
-                    value={form.ketua}
-                    onChange={(e) => update("ketua", e.target.value)}
-                    placeholder={isTim ? "Nama lengkap ketua tim" : "Nama lengkap Anda"}
-                    className={inputClass(!!errors.ketua)}
-                  />
-                </Field>
+                {kategoriConfig.butuhProdi ? (
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field
+                      label={isTim ? "Nama Ketua Tim/Peserta" : "Nama Lengkap Peserta"}
+                      required
+                      error={errors.ketua}
+                      icon={<User className="size-4" />}
+                    >
+                      <input
+                        type="text"
+                        value={form.ketua}
+                        onChange={(e) => update("ketua", e.target.value)}
+                        placeholder={isTim ? "Nama lengkap ketua tim" : "Nama lengkap Anda"}
+                        className={inputClass(!!errors.ketua)}
+                      />
+                    </Field>
+                    <Field
+                      label={isTim ? "Program Studi Ketua Tim" : "Program Studi"}
+                      required
+                      error={errors.prodiKetua}
+                      icon={<GraduationCap className="size-4" />}
+                    >
+                      <input
+                        type="text"
+                        value={form.prodiKetua}
+                        onChange={(e) => update("prodiKetua", e.target.value)}
+                        placeholder="Contoh: Akuntansi"
+                        className={inputClass(!!errors.prodiKetua)}
+                      />
+                    </Field>
+                  </div>
+                ) : (
+                  <Field
+                    label={isTim ? "Nama Ketua Tim/Peserta" : "Nama Lengkap Peserta"}
+                    required
+                    error={errors.ketua}
+                    icon={<User className="size-4" />}
+                  >
+                    <input
+                      type="text"
+                      value={form.ketua}
+                      onChange={(e) => update("ketua", e.target.value)}
+                      placeholder={isTim ? "Nama lengkap ketua tim" : "Nama lengkap Anda"}
+                      className={inputClass(!!errors.ketua)}
+                    />
+                  </Field>
+                )}
 
                 {isTim && (
-                  <div className="rounded-2xl border border-dashed border-border bg-secondary/40 p-4">
+                  <div className="rounded-2xl border border-dashed border-border bg-secondary/40 p-4 transition-colors duration-200 hover:border-primary/30">
                     <p className="mb-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
                       <Users className="size-4" aria-hidden="true" />
                       {timWajib
-                        ? "Wajib terdiri atas tiga orang (satu ketua dan dua anggota)."
-                        : "Jumlah anggota tim bersifat opsional, maksimal tiga orang termasuk ketua."}
+                        ? "Tim wajib terdiri atas 3 orang (1 ketua dan 2 anggota)."
+                        : "Jumlah anggota tim bersifat opsional, terdiri atas 1 hingga 3 orang termasuk ketua."}
                     </p>
                     <div className="grid gap-4 md:grid-cols-2">
-                      <Field
-                        label="Nama Anggota 1"
-                        required={timWajib}
-                        error={errors.anggota1}
-                        icon={<User className="size-4" />}
-                      >
-                        <input
-                          type="text"
-                          value={form.anggota1}
-                          onChange={(e) => update("anggota1", e.target.value)}
-                          placeholder={timWajib ? "Nama lengkap anggota 1" : "Opsional — dapat dikosongkan"}
-                          className={inputClass(!!errors.anggota1)}
-                        />
-                      </Field>
-                      <Field
-                        label="Nama Anggota 2"
-                        required={timWajib}
-                        error={errors.anggota2}
-                        icon={<User className="size-4" />}
-                      >
-                        <input
-                          type="text"
-                          value={form.anggota2}
-                          onChange={(e) => update("anggota2", e.target.value)}
-                          placeholder={timWajib ? "Nama lengkap anggota 2" : "Opsional — dapat dikosongkan"}
-                          className={inputClass(!!errors.anggota2)}
-                        />
-                      </Field>
+                      <div className="space-y-4">
+                        <Field
+                          label="Nama Anggota 1"
+                          required={timWajib}
+                          error={errors.anggota1}
+                          icon={<User className="size-4" />}
+                        >
+                          <input
+                            type="text"
+                            value={form.anggota1}
+                            onChange={(e) => update("anggota1", e.target.value)}
+                            placeholder={timWajib ? "Nama lengkap anggota 1" : "Opsional"}
+                            className={inputClass(!!errors.anggota1)}
+                          />
+                        </Field>
+                        {kategoriConfig.butuhProdi && (
+                          <Field
+                            label="Program Studi Anggota 1"
+                            required={timWajib}
+                            error={errors.prodiAnggota1}
+                            icon={<GraduationCap className="size-4" />}
+                          >
+                            <input
+                              type="text"
+                              value={form.prodiAnggota1}
+                              onChange={(e) => update("prodiAnggota1", e.target.value)}
+                              placeholder="Contoh: Akuntansi"
+                              className={inputClass(!!errors.prodiAnggota1)}
+                            />
+                          </Field>
+                        )}
+                      </div>
+                      <div className="space-y-4">
+                        <Field
+                          label="Nama Anggota 2"
+                          required={timWajib}
+                          error={errors.anggota2}
+                          icon={<User className="size-4" />}
+                        >
+                          <input
+                            type="text"
+                            value={form.anggota2}
+                            onChange={(e) => update("anggota2", e.target.value)}
+                            placeholder={timWajib ? "Nama lengkap anggota 2" : "Opsional"}
+                            className={inputClass(!!errors.anggota2)}
+                          />
+                        </Field>
+                        {kategoriConfig.butuhProdi && (
+                          <Field
+                            label="Program Studi Anggota 2"
+                            required={timWajib}
+                            error={errors.prodiAnggota2}
+                            icon={<GraduationCap className="size-4" />}
+                          >
+                            <input
+                              type="text"
+                              value={form.prodiAnggota2}
+                              onChange={(e) => update("prodiAnggota2", e.target.value)}
+                              placeholder="Contoh: Akuntansi"
+                              className={inputClass(!!errors.prodiAnggota2)}
+                            />
+                          </Field>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -987,25 +1080,25 @@ function RegistrationFormInner() {
 
                 {/* Pakta Integritas */}
                 <div data-error={!!errors.pakta}>
-                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-secondary/40 p-4 transition-all duration-200 hover:border-primary/30 hover:bg-secondary/60 hover:shadow-sm">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-secondary/40 p-4 transition-all duration-200 hover:border-primary/40 hover:bg-secondary/60">
                     <button
                       type="button"
                       role="checkbox"
                       aria-checked={form.pakta}
                       onClick={() => update("pakta", !form.pakta)}
                       className={cn(
-                        "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border transition-all duration-200 hover:scale-110 active:scale-95",
-                        form.pakta ? "border-primary bg-primary" : "border-input bg-background hover:border-primary/60",
+                        "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border transition-all duration-200 hover:scale-110",
+                        form.pakta ? "border-primary bg-primary" : "border-input bg-background",
                       )}
                     >
                       {form.pakta && (
-                        <CheckCircle2 className="size-4 animate-in zoom-in duration-200 text-primary-foreground" aria-hidden="true" />
+                        <CheckCircle2 className="size-4 text-primary-foreground animate-in zoom-in duration-200" aria-hidden="true" />
                       )}
                     </button>
                     <span className="text-sm leading-relaxed text-muted-foreground">
                       <span className="font-semibold text-foreground">Pakta Integritas.</span> Saya menyatakan bahwa
-                      seluruh data yang diisi adalah benar, karya yang dikirimkan bersifat orisinal dan belum pernah
-                      diikutsertakan dalam perlombaan lain, serta bersedia mematuhi seluruh ketentuan dan peraturan
+                      seluruh data yang diisi adalah benar, karya yang dikirimkan orisinal dan belum pernah
+                      diikutsertakan pada perlombaan lain, serta bersedia mematuhi seluruh ketentuan dan peraturan
                       Auditphoria 6.0.
                     </span>
                   </label>
@@ -1015,21 +1108,22 @@ function RegistrationFormInner() {
 
               <button type="button" onClick={handleNextData} className={cn(primaryBtn, "w-full")}>
                 Lanjut ke Berkas
-                <ArrowRight className="size-5 transition-transform duration-300 group-hover:translate-x-1" aria-hidden="true" />
+                <ArrowRight className="size-5 transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true" />
               </button>
             </div>
           )}
 
           {step === 1 && (
-            <div className="space-y-8">
-              <Section number="2" title="Unggah Berkas" description={`Kategori Lomba: ${kategoriConfig.code} — ${kategoriConfig.label}`}>
+            <div className="space-y-8 animate-in fade-in duration-300">
+              <Section number="2" title="Unggah Berkas" description={`Lomba: ${kategoriConfig.code} — ${kategoriConfig.label}`}>
                 <div className="space-y-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Berkas Umum &middot; batas jumlah berkas berbeda tiap jenis, lihat keterangan di bawah tiap kolom
+                    Berkas Umum &middot; maksimal {MAX_BUKTI} berkas per jenis (Bukti Follow Instagram maksimal{" "}
+                    {MAX_FOLLOW_IG} berkas)
                   </p>
                   <MultiFileField
                     label="Bukti Follow Instagram"
-                    hint="Sertakan tangkapan layar bukti mengikuti akun Instagram @auditphoria6.0 dan @bakpknstan. Format JPG/PNG, maksimal 10MB."
+                    hint="Bukti telah mengikuti akun Instagram @auditphoria6.0 dan @bakpknstan — tangkapan layar format JPG / PNG, maksimal 10MB"
                     accept="image/png,image/jpeg"
                     icon={<AtSign className="size-4" />}
                     files={files.followIg}
@@ -1040,7 +1134,7 @@ function RegistrationFormInner() {
                   />
                   <MultiFileField
                     label="Scan KTM / Surat Keterangan Mahasiswa Aktif"
-                    hint="Unggah Kartu Tanda Mahasiswa (KTM) atau surat keterangan mahasiswa aktif dari perguruan tinggi. Format JPG/PNG/PDF, maksimal 10MB."
+                    hint="Kartu Tanda Mahasiswa atau surat keterangan mahasiswa aktif dari perguruan tinggi — format JPG / PNG / PDF, maksimal 10MB"
                     accept="image/png,image/jpeg,.pdf"
                     icon={<IdCard className="size-4" />}
                     files={files.ktm}
@@ -1052,7 +1146,7 @@ function RegistrationFormInner() {
                   {kategoriConfig.butuhFotoDiri && (
                     <MultiFileField
                       label="Foto Diri Masing-Masing Anggota"
-                      hint="Unggah foto diri setiap anggota tim, satu berkas untuk setiap anggota. Format JPG/PNG/PDF, maksimal 10MB."
+                      hint="Unggah foto diri setiap anggota tim, satu berkas untuk setiap anggota — format JPG / PNG / PDF, maksimal 10MB"
                       accept="image/png,image/jpeg,.pdf"
                       icon={<UserRound className="size-4" />}
                       files={files.fotoDiri}
@@ -1064,7 +1158,7 @@ function RegistrationFormInner() {
                   )}
                   <MultiFileField
                     label="Bukti Upload Twibbon"
-                    hint="Sertakan tangkapan layar twibbon yang telah diunggah. Format JPG/PNG, maksimal 10MB."
+                    hint="Tangkapan layar twibbon yang telah diunggah — format JPG / PNG, maksimal 10MB"
                     accept="image/png,image/jpeg"
                     icon={<ImageIcon className="size-4" />}
                     files={files.twibbon}
@@ -1076,7 +1170,7 @@ function RegistrationFormInner() {
                   {kategoriConfig.butuhPosterIg && (
                     <MultiFileField
                       label="Bukti Upload Poster ke IG Story"
-                      hint="Sertakan tangkapan layar poster AEC yang telah diunggah ke Instagram Story. Format JPG/PNG, maksimal 10MB."
+                      hint="Tangkapan layar poster AEC yang telah diunggah ke Instagram Story — format JPG / PNG, maksimal 10MB"
                       accept="image/png,image/jpeg"
                       icon={<ImageIcon className="size-4" />}
                       files={files.posterIg}
@@ -1089,30 +1183,30 @@ function RegistrationFormInner() {
                 </div>
               </Section>
 
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <button type="button" onClick={() => goTo(0)} className={cn(ghostBtn, "min-w-0 flex-1")}>
-                  <ArrowLeft className="size-5 shrink-0 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true" />
+              <div className="flex gap-3">
+                <button type="button" onClick={() => goTo(0)} className={cn(ghostBtn, "flex-1")}>
+                  <ArrowLeft className="size-5 transition-transform duration-200 group-hover:-translate-x-1" aria-hidden="true" />
                   Kembali
                 </button>
-                <button type="button" onClick={handleNextFiles} className={cn(primaryBtn, "min-w-0 flex-1")}>
+                <button type="button" onClick={handleNextFiles} className={cn(primaryBtn, "flex-1")}>
                   Lanjut ke Pembayaran
-                  <ArrowRight className="size-5 shrink-0 transition-transform duration-300 group-hover:translate-x-1" aria-hidden="true" />
+                  <ArrowRight className="size-5 transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true" />
                 </button>
               </div>
             </div>
           )}
 
           {step === 2 && (
-            <div className="space-y-8">
-              <Section number="3" title="Pembayaran" description="Lakukan pembayaran melalui salah satu rekening berikut, kemudian unggah bukti transfer sebagai konfirmasi.">
+            <div className="space-y-8 animate-in fade-in duration-300">
+              <Section number="3" title="Pembayaran" description="Lakukan pembayaran, lalu unggah bukti transfer sebagai konfirmasi">
                 <div className="grid gap-4 sm:grid-cols-2">
                   {BANKS.map((b) => (
                     <div
                       key={b.key}
-                      className="flex flex-col justify-center rounded-2xl border border-border bg-card p-5 transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10"
+                      className="group flex flex-col justify-center rounded-2xl border border-border bg-card p-5 transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
                     >
                       <div className="mb-3 flex items-center gap-3">
-                        <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-background p-1.5">
+                        <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-background p-1.5 transition-transform duration-300 group-hover:scale-105">
                           <Image
                             src={b.logo}
                             alt={`Logo ${b.bank}`}
@@ -1155,7 +1249,7 @@ function RegistrationFormInner() {
 
                 <MultiFileField
                   label="Upload Bukti Pembayaran"
-                  hint="Unggah bukti transfer pembayaran. Format JPG/PNG/PDF, maksimal 10MB."
+                  hint="Unggah bukti transfer — format JPG / PNG / PDF, maksimal 10MB"
                   accept="image/png,image/jpeg,.pdf"
                   icon={<Upload className="size-4" />}
                   files={files.buktiBayar}
@@ -1167,30 +1261,30 @@ function RegistrationFormInner() {
               </Section>
 
               {submitError && (
-                <p role="status" className="rounded-lg bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+                <p role="status" className="rounded-lg bg-destructive/10 px-4 py-2.5 text-sm text-destructive animate-in fade-in slide-in-from-top-1 duration-200">
                   {submitError}
                 </p>
               )}
 
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <button type="button" onClick={() => goTo(1)} className={cn(ghostBtn, "min-w-0 flex-1")}>
-                  <ArrowLeft className="size-5 shrink-0 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true" />
+              <div className="flex gap-3">
+                <button type="button" onClick={() => goTo(1)} className={cn(ghostBtn, "flex-1")}>
+                  <ArrowLeft className="size-5 transition-transform duration-200 group-hover:-translate-x-1" aria-hidden="true" />
                   Kembali
                 </button>
-                <button type="button" onClick={handleNextBayar} className={cn(primaryBtn, "min-w-0 flex-1")}>
+                <button type="button" onClick={handleNextBayar} className={cn(primaryBtn, "flex-1")}>
                   Lanjut ke Review
-                  <ArrowRight className="size-5 shrink-0 transition-transform duration-300 group-hover:translate-x-1" aria-hidden="true" />
+                  <ArrowRight className="size-5 transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true" />
                 </button>
               </div>
             </div>
           )}
 
           {step === 3 && (
-            <div className="space-y-8">
+            <div className="space-y-8 animate-in fade-in duration-300">
               <Section
                 number="4"
                 title="Review & Konfirmasi"
-                description="Periksa kembali seluruh data dan berkas yang telah diisi. Klik nama berkas untuk membukanya sebelum mengirim pendaftaran."
+                description="Periksa kembali data dan berkas Anda — klik nama berkas untuk membukanya, sebelum mengirim pendaftaran"
               >
                 <ReviewSummary
                   form={form}
@@ -1202,34 +1296,23 @@ function RegistrationFormInner() {
               </Section>
 
               {submitError && (
-                <p role="status" className="rounded-lg bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+                <p role="status" className="rounded-lg bg-destructive/10 px-4 py-2.5 text-sm text-destructive animate-in fade-in slide-in-from-top-1 duration-200">
                   {submitError}
                 </p>
               )}
 
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={() => goTo(2)}
-                  className={cn(ghostBtn, "min-w-0 flex-1")}
-                  disabled={submitting}
-                >
-                  <ArrowLeft className="size-5 shrink-0 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true" />
+              <div className="flex gap-3">
+                <button type="button" onClick={() => goTo(2)} className={cn(ghostBtn, "flex-1")} disabled={submitting}>
+                  <ArrowLeft className="size-5 transition-transform duration-200 group-hover:-translate-x-1" aria-hidden="true" />
                   Kembali
                 </button>
                 <button
                   type="button"
                   onClick={handleSubmit}
                   disabled={submitting}
-                  className={cn(primaryBtn, "min-w-0 flex-1", submitting && "opacity-70 pointer-events-none")}
+                  className={cn(primaryBtn, "flex-1", submitting && "opacity-70 pointer-events-none")}
                 >
-                  <CheckCircle2
-                    className={cn(
-                      "size-5 shrink-0 transition-transform duration-300",
-                      submitting ? "animate-spin" : "group-hover:scale-110",
-                    )}
-                    aria-hidden="true"
-                  />
+                  <CheckCircle2 className="size-5" aria-hidden="true" />
                   {submitting ? "Mengirim…" : "Kirim Pendaftaran"}
                 </button>
               </div>
@@ -1245,7 +1328,7 @@ function RegistrationFormInner() {
         href={`https://wa.me/${contact.whatsapp}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-2 flex items-center justify-center gap-1.5 text-sm font-semibold text-white hover:text-accent hover:underline"
+        className="mt-2 inline-flex w-full items-center justify-center gap-1.5 text-sm font-semibold text-white transition-all duration-200 hover:scale-105 hover:text-accent hover:underline"
       >
         <MessageCircle className="size-4" aria-hidden="true" />
         {contact.nama} (+{contact.whatsapp})
@@ -1264,8 +1347,8 @@ function KategoriPicker({ onPick }: { onPick: (value: Exclude<KategoriValue, "">
         <div className="mb-6 text-center">
           <h1 className="font-heading text-2xl font-bold text-foreground">Pendaftaran Auditphoria 6.0</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Link ini dibuka tanpa lomba spesifik. Pilih cabang lomba di bawah, atau gunakan link pendaftaran resmi
-            dari halaman lomba masing-masing.
+            Tautan ini dibuka tanpa cabang lomba yang spesifik. Silakan pilih cabang lomba di bawah ini, atau gunakan
+            tautan pendaftaran resmi dari halaman masing-masing lomba.
           </p>
         </div>
         <div className="grid gap-3">
@@ -1274,9 +1357,9 @@ function KategoriPicker({ onPick }: { onPick: (value: Exclude<KategoriValue, "">
               key={k.value}
               type="button"
               onClick={() => onPick(k.value)}
-              className="group flex items-center gap-4 rounded-2xl border border-input bg-background p-4 text-left transition-all hover:border-primary/40 hover:bg-secondary/40"
+              className="group flex items-center gap-4 rounded-2xl border border-input bg-background p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/50 hover:bg-secondary/40 hover:shadow-md active:translate-y-0 active:scale-[0.99]"
             >
-              <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary">
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-secondary text-primary transition-all duration-200 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground">
                 {k.icon}
               </span>
               <span className="flex-1">
@@ -1285,7 +1368,10 @@ function KategoriPicker({ onPick }: { onPick: (value: Exclude<KategoriValue, "">
                 </span>
                 <span className="block text-xs text-muted-foreground">{k.desc}</span>
               </span>
-              <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <ArrowRight
+                className="size-4 shrink-0 text-muted-foreground transition-all duration-200 group-hover:translate-x-1 group-hover:text-primary"
+                aria-hidden="true"
+              />
             </button>
           ))}
         </div>
@@ -1304,7 +1390,7 @@ function PendaftaranBelumDibuka({ kategoriConfig, text }: { kategoriConfig: Kate
         <h1 className="font-heading text-xl font-bold text-foreground">Pendaftaran {kategoriConfig.code} Belum Dibuka</h1>
         <p className="mt-2 text-sm text-muted-foreground">{text}</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Kembali lagi ke link ini saat periode pendaftaran {kategoriConfig.label} sudah dimulai.
+          Silakan kembali ke tautan ini setelah periode pendaftaran {kategoriConfig.label} resmi dibuka.
         </p>
       </div>
     </div>
@@ -1320,7 +1406,8 @@ function PendaftaranDitutup({ kategoriConfig }: { kategoriConfig: KategoriConfig
         </div>
         <h1 className="font-heading text-xl font-bold text-foreground">Pendaftaran {kategoriConfig.code} Ditutup</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Batas waktu pendaftaran untuk {kategoriConfig.label} sudah berakhir. Hubungi panitia jika ada pertanyaan.
+          Batas waktu pendaftaran untuk {kategoriConfig.label} telah berakhir. Silakan hubungi panitia apabila
+          terdapat pertanyaan lebih lanjut.
         </p>
       </div>
     </div>
@@ -1384,9 +1471,49 @@ function useBatchStatus(batches: Batch[]): BatchStatus {
  * warna aksen emas di atas latar ungu biar kontras & langsung kebaca tanpa
  * perlu dibaca teksnya. Persentase dihitung lewat calculateProgress().
  */
+/**
+ * Interpolasi warna merah -> kuning -> hijau berdasarkan persentase (0-100),
+ * dipakai supaya ProgressRing kerasa "hidup": makin jauh dari selesai makin
+ * merah/mendesak, makin dekat selesai makin hijau/aman — bukan warna solid
+ * yang monoton di semua persentase.
+ */
+/**
+ * Palet 6-stop merah -> oranye -> kuning -> kuning terang -> hijau -> hijau
+ * terang, diinterpolasi linear per-channel RGB antar dua stop terdekat
+ * supaya transisinya halus (bukan cuma satu hue yang diputar).
+ */
+const PROGRESS_COLOR_STOPS: [number, [number, number, number]][] = [
+  [0, [239, 68, 68]], // merah
+  [20, [249, 115, 22]], // oranye
+  [40, [234, 179, 8]], // kuning
+  [60, [253, 224, 71]], // kuning terang
+  [80, [34, 197, 94]], // hijau
+  [100, [74, 222, 128]], // hijau terang
+]
+
+function progressColor(percent: number) {
+  const clamped = Math.min(100, Math.max(0, percent))
+  let lower = PROGRESS_COLOR_STOPS[0]
+  let upper = PROGRESS_COLOR_STOPS[PROGRESS_COLOR_STOPS.length - 1]
+  for (let i = 0; i < PROGRESS_COLOR_STOPS.length - 1; i++) {
+    if (clamped >= PROGRESS_COLOR_STOPS[i][0] && clamped <= PROGRESS_COLOR_STOPS[i + 1][0]) {
+      lower = PROGRESS_COLOR_STOPS[i]
+      upper = PROGRESS_COLOR_STOPS[i + 1]
+      break
+    }
+  }
+  const [lowerPct, lowerRgb] = lower
+  const [upperPct, upperRgb] = upper
+  const t = (clamped - lowerPct) / (upperPct - lowerPct || 1)
+  const r = Math.round(lowerRgb[0] + (upperRgb[0] - lowerRgb[0]) * t)
+  const g = Math.round(lowerRgb[1] + (upperRgb[1] - lowerRgb[1]) * t)
+  const b = Math.round(lowerRgb[2] + (upperRgb[2] - lowerRgb[2]) * t)
+  return `rgb(${r}, ${g}, ${b})`
+}
+
 function ProgressRing({ percent }: { percent: number }) {
-  const size = 68
-  const stroke = 6
+  const size = 80
+  const stroke = 7
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
   const clamped = Math.min(100, Math.max(0, Math.round(percent)))
@@ -1395,7 +1522,12 @@ function ProgressRing({ percent }: { percent: number }) {
 
   return (
     <div className="flex shrink-0 flex-col items-center gap-1.5">
-      <div className="relative flex items-center justify-center drop-shadow-[0_2px_10px_rgba(0,0,0,0.18)]">
+      <div
+        className={cn(
+          "relative flex items-center justify-center drop-shadow-[0_2px_10px_rgba(0,0,0,0.18)] transition-transform duration-300",
+          isDone && "animate-in zoom-in duration-500",
+        )}
+      >
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
           <circle
             cx={size / 2}
@@ -1410,23 +1542,23 @@ function ProgressRing({ percent }: { percent: number }) {
             cy={size / 2}
             r={radius}
             fill="none"
-            stroke={isDone ? "#ffffff" : "var(--accent)"}
+            stroke={isDone ? "#ffffff" : progressColor(clamped)}
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
-            className="transition-[stroke-dashoffset] duration-700 ease-out"
+            style={{ transition: "stroke-dashoffset 700ms ease-out, stroke 400ms ease" }}
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
           {isDone ? (
-            <Check className="size-6 text-primary-foreground" aria-hidden="true" />
+            <Check className="size-7 text-primary-foreground" aria-hidden="true" />
           ) : (
-            <span className="font-heading text-base font-bold text-primary-foreground">{clamped}%</span>
+            <span className="font-heading text-lg font-bold text-primary-foreground">{clamped}%</span>
           )}
         </div>
       </div>
-      <span className="hidden text-[10px] font-semibold uppercase tracking-wider text-primary-foreground/70 sm:block">
+      <span className="hidden text-xs font-semibold uppercase tracking-wider text-primary-foreground/70 sm:block">
         {isDone ? "Lengkap" : "Progres"}
       </span>
     </div>
@@ -1445,17 +1577,17 @@ function Stepper({ current }: { current: number }) {
               <div className="flex items-center gap-2">
                 <span
                   className={cn(
-                    "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors",
+                    "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-all duration-300",
                     done && "bg-primary text-primary-foreground",
                     active && "bg-primary text-primary-foreground ring-4 ring-primary/15",
                     !done && !active && "bg-background text-muted-foreground ring-1 ring-border",
                   )}
                 >
-                  {done ? <Check className="size-4" aria-hidden="true" /> : i + 1}
+                  {done ? <Check className="size-4 animate-in zoom-in duration-200" aria-hidden="true" /> : i + 1}
                 </span>
                 <span
                   className={cn(
-                    "hidden text-xs font-semibold sm:inline",
+                    "hidden text-xs font-semibold transition-colors duration-300 sm:inline",
                     active ? "text-foreground" : "text-muted-foreground",
                   )}
                 >
@@ -1463,7 +1595,7 @@ function Stepper({ current }: { current: number }) {
                 </span>
               </div>
               {i < steps.length - 1 && (
-                <span className={cn("mx-2 h-0.5 flex-1 rounded-full", done ? "bg-primary" : "bg-border")} />
+                <span className={cn("mx-2 h-0.5 flex-1 rounded-full transition-colors duration-500", done ? "bg-primary" : "bg-border")} />
               )}
             </li>
           )
@@ -1495,12 +1627,20 @@ function MultiFileField({
   maxFiles: number
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const atMax = files.length >= maxFiles
 
   function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = Array.from(e.target.files ?? [])
     if (selected.length > 0) onSelect(selected)
     e.target.value = ""
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLButtonElement>) {
+    e.preventDefault()
+    setIsDragging(false)
+    const dropped = Array.from(e.dataTransfer.files ?? [])
+    if (dropped.length > 0) onSelect(dropped)
   }
 
   return (
@@ -1519,9 +1659,9 @@ function MultiFileField({
           {files.map((file, i) => (
             <li
               key={file.id}
-              className="flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 px-4 py-2.5"
+              className="group flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 px-4 py-2.5 transition-all duration-200 hover:border-primary/70 hover:bg-primary/10 hover:shadow-sm"
             >
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-transform duration-200 group-hover:scale-105">
                 {file.uploading ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 ) : (
@@ -1529,31 +1669,31 @@ function MultiFileField({
                 )}
               </span>
               <span className="min-w-0 flex-1">
-                {/* Klik nama file untuk buka & cek langsung berkas yang sudah terunggah. */}
+                {/* Klik nama berkas untuk membuka & memeriksa langsung berkas yang telah terunggah. */}
                 {file.url ? (
                   <a
                     href={file.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex min-w-0 items-center gap-1 truncate text-sm font-medium text-primary hover:underline"
+                    className="flex min-w-0 items-center gap-1 truncate text-sm font-medium text-primary transition-colors duration-200 hover:underline"
                   >
                     <span className="truncate">{file.name}</span>
-                    <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
+                    <ExternalLink className="size-3 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" aria-hidden="true" />
                   </a>
                 ) : (
                   <span className="block truncate text-sm font-medium text-foreground">{file.name}</span>
                 )}
                 <span className="block text-xs text-muted-foreground">
                   {file.uploading
-                    ? "Mengunggah…"
-                    : `${(file.size / 1024).toFixed(0)} KB · Tersimpan. Klik nama berkas untuk memeriksa.`}
+                    ? "Sedang mengunggah…"
+                    : `${(file.size / 1024).toFixed(0)} KB · tersimpan — klik nama berkas untuk memeriksa`}
                 </span>
               </span>
               <button
                 type="button"
                 onClick={() => onRemove(i)}
                 aria-label={`Hapus ${file.name}`}
-                className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:scale-110 hover:rotate-90 hover:bg-destructive/10 hover:text-destructive"
               >
                 <X className="size-4" aria-hidden="true" />
               </button>
@@ -1566,28 +1706,36 @@ function MultiFileField({
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault()
+            setIsDragging(true)
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
           className={cn(
-            "flex w-full items-center gap-3 rounded-xl border border-dashed bg-background px-4 py-3 text-left transition-colors",
+            "group flex w-full items-center gap-3 rounded-xl border border-dashed bg-background px-4 py-3 text-left transition-all duration-200",
             error
               ? "border-destructive ring-2 ring-destructive/20"
-              : "border-input hover:border-primary/50 hover:bg-secondary/40",
+              : isDragging
+                ? "scale-[1.01] border-primary bg-primary/5 shadow-md ring-2 ring-primary/20"
+                : "border-input hover:-translate-y-0.5 hover:border-primary/60 hover:bg-secondary/40 hover:shadow-sm",
           )}
         >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary transition-all duration-200 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground">
             {files.length > 0 ? <Plus className="size-4" aria-hidden="true" /> : <Upload className="size-4" aria-hidden="true" />}
           </span>
           <span>
             <span className="block text-sm font-medium text-foreground">
-              {files.length > 0 ? "Tambah file lagi" : "Pilih file"}
+              {files.length > 0 ? "Tambah berkas lagi" : "Pilih berkas"}
             </span>
             <span className="block text-xs text-muted-foreground">
-              {hint} Anda dapat memilih beberapa berkas sekaligus.
+              {hint} &middot; dapat memilih beberapa berkas sekaligus
             </span>
           </span>
         </button>
       ) : (
         <p className="rounded-xl border border-dashed border-border bg-secondary/40 px-4 py-2.5 text-xs font-medium text-muted-foreground">
-          Batas maksimal {maxFiles} file tercapai. Hapus salah satu untuk mengganti.
+          Batas maksimal {maxFiles} berkas telah tercapai. Hapus salah satu berkas untuk menggantinya.
         </p>
       )}
 
@@ -1618,8 +1766,13 @@ function ReviewSummary({
         <dl className="space-y-2 text-sm">
           {isTim && form.namaTim && <ReviewRow label="Nama Tim" value={form.namaTim} />}
           <ReviewRow label={isTim ? "Ketua Tim/Peserta" : "Nama Peserta"} value={form.ketua} />
+          {form.prodiKetua && (
+            <ReviewRow label={isTim ? "Program Studi Ketua" : "Program Studi"} value={form.prodiKetua} />
+          )}
           {form.anggota1 && <ReviewRow label="Anggota 1" value={form.anggota1} />}
+          {form.prodiAnggota1 && <ReviewRow label="Program Studi Anggota 1" value={form.prodiAnggota1} />}
           {form.anggota2 && <ReviewRow label="Anggota 2" value={form.anggota2} />}
+          {form.prodiAnggota2 && <ReviewRow label="Program Studi Anggota 2" value={form.prodiAnggota2} />}
           <ReviewRow label="Asal Institusi" value={form.sekolah} />
           <ReviewRow label="Kota Asal" value={form.kota} />
           <ReviewRow label="No. Telepon" value={form.telepon} />
@@ -1651,11 +1804,16 @@ function ReviewSummary({
 
 function ReviewBlock({ title, onEdit, children }: { title: string; onEdit: () => void; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-border bg-secondary/30 p-5">
+    <div className="rounded-2xl border border-border bg-secondary/30 p-5 transition-colors duration-200 hover:bg-secondary/40">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="font-heading text-sm font-bold text-foreground">{title}</h3>
-        <button type="button" onClick={onEdit} className="text-xs font-semibold text-primary hover:underline">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="group inline-flex items-center gap-1 text-xs font-semibold text-primary transition-colors duration-200 hover:underline"
+        >
           Ubah
+          <ArrowRight className="size-3 transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden="true" />
         </button>
       </div>
       {children}
@@ -1666,8 +1824,8 @@ function ReviewBlock({ title, onEdit, children }: { title: string; onEdit: () =>
 function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="shrink-0 text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 flex-1 break-words text-right font-medium text-foreground">{value || "-"}</dd>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="text-right font-medium text-foreground">{value || "-"}</dd>
     </div>
   )
 }
@@ -1677,20 +1835,20 @@ function ReviewFileGroup({ label, files }: { label: string; files: FileSlot[] })
     <div>
       <p className="mb-1.5 flex items-center justify-between text-xs font-semibold text-muted-foreground">
         <span>{label}</span>
-        <span>{files.length} file</span>
+        <span>{files.length} berkas</span>
       </p>
       {files.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border bg-background px-3 py-2 text-xs text-muted-foreground">
-          Belum ada berkas diunggah.
+          Belum ada berkas yang diunggah.
         </p>
       ) : (
         <ul className="space-y-1.5">
           {files.map((file) => (
             <li
               key={file.id}
-              className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2"
+              className="group flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 transition-all duration-200 hover:border-primary/40 hover:bg-secondary/30"
             >
-              <ImageIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <ImageIcon className="size-3.5 shrink-0 text-muted-foreground transition-colors duration-200 group-hover:text-primary" aria-hidden="true" />
               {file.url ? (
                 <a
                   href={file.url}
@@ -1699,10 +1857,10 @@ function ReviewFileGroup({ label, files }: { label: string; files: FileSlot[] })
                   className="flex min-w-0 flex-1 items-center gap-1 truncate text-xs font-medium text-primary hover:underline"
                 >
                   <span className="truncate">{file.name}</span>
-                  <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
+                  <ExternalLink className="size-3 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" aria-hidden="true" />
                 </a>
               ) : (
-                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{file.name} (mengunggah…)</span>
+                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{file.name} (sedang mengunggah…)</span>
               )}
             </li>
           ))}
@@ -1726,11 +1884,11 @@ function SuccessScreen({
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-16">
-      <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-xl">
+      <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-xl animate-in fade-in zoom-in-95 duration-500">
         <div className="relative overflow-hidden bg-primary px-8 py-10 text-center">
           <div className="absolute -right-8 -top-8 size-40 rounded-full bg-primary-foreground/10" aria-hidden="true" />
           <div className="relative">
-            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-primary-foreground/15">
+            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-primary-foreground/15 animate-in zoom-in duration-500 delay-150">
               <CheckCircle2 className="size-9 text-primary-foreground" aria-hidden="true" />
             </div>
             <h1 className="font-heading text-2xl font-bold text-primary-foreground text-balance">
@@ -1748,37 +1906,37 @@ function SuccessScreen({
             <span className="font-semibold text-foreground">
               {kategoriConfig.code} — {kategoriConfig.label}
             </span>{" "}
-            sedang kami verifikasi.
+            sedang dalam proses verifikasi oleh panitia.
           </p>
           <dl className="mt-6 space-y-2 rounded-2xl border border-border bg-secondary/40 p-5 text-sm">
             <div className="flex justify-between gap-4">
-              <dt className="shrink-0 text-muted-foreground">{isTim ? "Ketua Tim" : "Nama Peserta"}</dt>
-              <dd className="min-w-0 flex-1 break-words text-right font-medium text-foreground">{form.ketua}</dd>
+              <dt className="text-muted-foreground">{isTim ? "Ketua Tim" : "Nama Peserta"}</dt>
+              <dd className="font-medium text-foreground">{form.ketua}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="shrink-0 text-muted-foreground">Institusi</dt>
-              <dd className="min-w-0 flex-1 break-words text-right font-medium text-foreground">{form.sekolah}</dd>
+              <dt className="text-muted-foreground">Institusi</dt>
+              <dd className="text-right font-medium text-foreground">{form.sekolah}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="shrink-0 text-muted-foreground">Email Konfirmasi</dt>
-              <dd className="min-w-0 flex-1 break-words text-right font-medium text-foreground">{form.email}</dd>
+              <dt className="text-muted-foreground">Email Konfirmasi</dt>
+              <dd className="text-right font-medium text-foreground">{form.email}</dd>
             </div>
           </dl>
           <p className="mt-4 text-center text-xs text-muted-foreground">
-            Konfirmasi lolos verifikasi akan dikirim ke email {isTim ? "ketua tim" : "peserta"}.
+            Konfirmasi kelulusan verifikasi akan dikirimkan ke email {isTim ? "ketua tim" : "peserta"}.
           </p>
 
           <div className="mt-6 rounded-2xl border border-primary/30 bg-primary/5 p-5 text-center">
             <p className="text-sm font-semibold text-foreground">Langkah Selanjutnya</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Klik tombol di bawah untuk lanjut ke info resmi {kategoriConfig.code} — informasi teknis dan update
-              lomba akan dibagikan di sana.
+              Klik tombol di bawah untuk melanjutkan ke informasi resmi {kategoriConfig.code} — informasi teknis dan
+              pembaruan terkait lomba akan dibagikan melalui tautan tersebut.
             </p>
             <a
               href={KATEGORI_LINK[kategoriConfig.value]}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all hover:brightness-110"
+              className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30 hover:brightness-110 active:translate-y-0 active:scale-[0.98]"
             >
               <ExternalLink className="size-4" aria-hidden="true" />
               Lanjut ke Info {kategoriConfig.code}
@@ -1789,7 +1947,7 @@ function SuccessScreen({
             <button
               type="button"
               onClick={onReset}
-              className="inline-flex w-full items-center justify-center rounded-xl bg-secondary px-6 py-3 font-semibold text-secondary-foreground transition-colors hover:bg-secondary/70"
+              className="inline-flex w-full items-center justify-center rounded-xl bg-secondary px-6 py-3 font-semibold text-secondary-foreground transition-all duration-200 hover:-translate-y-0.5 hover:bg-secondary/70 hover:shadow-md active:translate-y-0 active:scale-[0.98]"
             >
               Daftar Lagi
             </button>
@@ -1798,7 +1956,7 @@ function SuccessScreen({
             href={`https://wa.me/${contact.whatsapp}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-4 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+            className="mt-4 flex items-center justify-center gap-1.5 text-sm font-semibold text-primary transition-all duration-200 hover:scale-105 hover:underline"
           >
             <MessageCircle className="size-4" aria-hidden="true" />
             Ada pertanyaan? Hubungi {contact.nama} (+{contact.whatsapp})
@@ -1812,17 +1970,17 @@ function SuccessScreen({
 /* ---------- Helper ---------- */
 
 const primaryBtn =
-  "group flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 font-heading text-base font-bold text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/35 hover:brightness-110 active:translate-y-0 active:scale-[0.98] active:shadow-md"
+  "group flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 font-heading text-base font-bold text-primary-foreground shadow-lg shadow-primary/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30 hover:brightness-110 active:translate-y-0 active:scale-[0.98]"
 
 const ghostBtn =
-  "group flex w-full items-center justify-center gap-2 rounded-xl border border-input bg-background px-6 py-4 font-heading text-base font-bold text-foreground transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-secondary/60 hover:shadow-md active:translate-y-0 active:scale-[0.98]"
+  "group flex w-full items-center justify-center gap-2 rounded-xl border border-input bg-background px-6 py-4 font-heading text-base font-bold text-foreground transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-secondary/60 hover:shadow-sm active:translate-y-0 active:scale-[0.98]"
 
 function inputClass(hasError: boolean) {
   return cn(
     "w-full rounded-xl border bg-background px-4 py-2.5 text-sm text-foreground outline-none transition-all duration-200 placeholder:text-muted-foreground/60",
     hasError
       ? "border-destructive ring-2 ring-destructive/20"
-      : "border-input hover:border-primary/40 hover:shadow-sm focus:border-primary focus:ring-2 focus:ring-primary/20",
+      : "border-input hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20",
   )
 }
 
