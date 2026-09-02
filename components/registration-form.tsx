@@ -857,15 +857,22 @@ function RegistrationFormInner() {
                     <p className="text-sm text-primary-foreground/80">{kategoriConfig.label}</p>
                   </div>
                 </div>
+
                 <a
                   href={KATEGORI_HANDBOOK[kategoriConfig.value]}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-foreground/15 px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-all duration-200 hover:scale-105 hover:bg-primary-foreground/25"
+                  className="group flex shrink-0 flex-col items-center gap-1.5"
                 >
-                  <BookOpen className="size-3.5" aria-hidden="true" />
-                  <span className="hidden sm:inline">Handbook</span>
-                  <ExternalLink className="size-3" aria-hidden="true" />
+                  <span className="relative flex size-12 items-center justify-center rounded-2xl border border-primary-foreground/20 bg-primary-foreground/10 text-primary-foreground shadow-sm transition-all duration-200 group-hover:-translate-y-0.5 group-hover:scale-105 group-hover:border-primary-foreground/30 group-hover:bg-primary-foreground/20 group-hover:shadow-md">
+                    <BookOpen className="size-5" aria-hidden="true" />
+                    <span className="absolute -bottom-1 -right-1 flex size-4 items-center justify-center rounded-full bg-accent text-accent-foreground ring-2 ring-primary transition-transform duration-200 group-hover:scale-110">
+                      <ExternalLink className="size-2.5" aria-hidden="true" />
+                    </span>
+                  </span>
+                  <span className="hidden text-[10px] font-semibold uppercase tracking-wider text-primary-foreground/70 sm:block">
+                    Handbook
+                  </span>
                 </a>
               </div>
             </div>
