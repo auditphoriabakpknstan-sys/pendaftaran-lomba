@@ -838,28 +838,33 @@ function RegistrationFormInner() {
           showCompactBar ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0",
         )}
       >
-        <div className="pointer-events-auto flex w-full max-w-2xl items-center justify-between gap-3 rounded-2xl border border-primary-foreground/10 bg-primary px-4 py-2.5 shadow-lg shadow-black/25">
-          <div className="flex min-w-0 items-center gap-2">
+        <div className="pointer-events-auto flex w-full max-w-2xl items-center justify-between gap-2 rounded-2xl border border-primary-foreground/10 bg-primary px-3 py-2.5 shadow-lg shadow-black/25 sm:gap-3 sm:px-4">
+          <div className="flex min-w-0 shrink items-center gap-2">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
               {kategoriConfig.icon}
             </div>
-            <span className="truncate font-heading text-sm font-bold text-primary-foreground">
+            <span className="hidden truncate font-heading text-sm font-bold text-primary-foreground xs:inline sm:inline">
               {kategoriConfig.code}
             </span>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+
+          {batchStatus.state === "open" && (
+            <MiniCountdownRings diffMs={batchStatus.diffMs} />
+          )}
+
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <a
               href={KATEGORI_HANDBOOK[kategoriConfig.value]}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2.5 py-1.5 text-xs font-semibold text-primary-foreground transition-colors duration-200 hover:bg-primary-foreground/20"
+              className="group flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2.5 py-1.5 text-xs font-semibold text-primary-foreground transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:bg-primary-foreground/20 hover:shadow-md active:translate-y-0 active:scale-100"
             >
-              <BookOpen className="size-4" aria-hidden="true" />
+              <BookOpen className="size-4 transition-transform duration-200 group-hover:-rotate-6 group-hover:scale-110" aria-hidden="true" />
               <span className="hidden sm:inline">Handbook</span>
             </a>
             <div className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2.5 py-1.5 text-xs font-semibold text-primary-foreground">
               <MiniProgressRing percent={progress} />
-              <span>{progress}%</span>
+              <span className="hidden xs:inline">{progress}%</span>
             </div>
           </div>
         </div>
@@ -1524,7 +1529,7 @@ function formatCountdown(diffMs: number) {
 }
 
 type BatchStatus =
-  | { state: "open"; text: string; batchLabel: string }
+  | { state: "open"; text: string; batchLabel: string; diffMs: number }
   | { state: "upcoming"; text: string; batchLabel: string }
   | { state: "closed"; text: string }
 
@@ -1550,7 +1555,7 @@ function useBatchStatus(batches: Batch[]): BatchStatus {
   const active = batches.find((b) => now >= new Date(b.start).getTime() && now <= new Date(b.end).getTime())
   if (active) {
     const diff = new Date(active.end).getTime() - now
-    return { state: "open", text: `${formatCountdown(diff)} (${active.label})`, batchLabel: active.label }
+    return { state: "open", text: `${formatCountdown(diff)} (${active.label})`, batchLabel: active.label, diffMs: diff }
   }
 
   const upcoming = batches
@@ -1596,6 +1601,72 @@ function progressColor(percent: number) {
   const g = Math.round(lowerRgb[1] + (upperRgb[1] - lowerRgb[1]) * t)
   const b = Math.round(lowerRgb[2] + (upperRgb[2] - lowerRgb[2]) * t)
   return `rgb(${r}, ${g}, ${b})`
+}
+
+/**
+ * Satu ring kecil untuk satu unit waktu (hari/jam/menit/detik) di
+ * MiniCountdownRings — nilainya sendiri yang ditulis di tengah ring,
+ * sementara isian ring menunjukkan proporsi nilai itu terhadap batas
+ * maksimum unitnya (mis. detik terhadap 60) sebagai aksen visual.
+ */
+function CountdownRingUnit({ value, max, label }: { value: number; max: number; label: string }) {
+  const size = 26
+  const stroke = 3
+  const radius = (size - stroke) / 2
+  const circumference = 2 * Math.PI * radius
+  const percent = Math.min(100, Math.max(0, (value / max) * 100))
+  const offset = circumference - (percent / 100) * circumference
+
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <div className="relative flex items-center justify-center">
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth={stroke} />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="#ffffff"
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            style={{ transition: "stroke-dashoffset 500ms linear" }}
+          />
+        </svg>
+        <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-primary-foreground">
+          {String(value).padStart(2, "0")}
+        </span>
+      </div>
+      <span className="text-[7px] font-semibold uppercase leading-none tracking-wide text-primary-foreground/60">
+        {label}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * Mini countdown 4 lingkaran (Hari, Jam, Menit, Detik) untuk sisa waktu
+ * batch pendaftaran yang sedang aktif — ditampilkan di compact bar sticky
+ * begitu header asli discroll lewat. Update tiap detik mengikuti diffMs
+ * dari useBatchStatus.
+ */
+function MiniCountdownRings({ diffMs }: { diffMs: number }) {
+  const totalSeconds = Math.max(0, Math.floor(diffMs / 1000))
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      <CountdownRingUnit value={days} max={30} label="Hari" />
+      <CountdownRingUnit value={hours} max={24} label="Jam" />
+      <CountdownRingUnit value={minutes} max={60} label="Mnt" />
+      <CountdownRingUnit value={seconds} max={60} label="Dtk" />
+    </div>
+  )
 }
 
 /**
