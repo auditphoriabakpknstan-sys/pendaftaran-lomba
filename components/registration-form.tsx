@@ -35,6 +35,7 @@ import {
   Clock,
   Loader2,
   ExternalLink,
+  BookOpen,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -157,6 +158,19 @@ const KATEGORI_LINK: Record<Exclude<KategoriValue, "">, string> = {
   aice: "http://staner.id/AICEAuditphoria6",
   avoc: "http://staner.id/WAGAVOCAuditphoria6",
   lcca: "http://staner.id/WAGLCCAAuditphoria6",
+}
+
+/**
+ * Link handbook (panduan lomba) per kategori, disimpan di Google Drive —
+ * ditampilkan sebagai tombol di header form supaya peserta bisa cek aturan
+ * lomba kapan saja sebelum/selama mengisi form.
+ */
+const KATEGORI_HANDBOOK: Record<Exclude<KategoriValue, "">, string> = {
+  aec: "https://drive.google.com/file/d/1F3liIEGXGQDh3SY1OqBg6G_quGHKUd6j/view?usp=drive_link",
+  arc: "https://drive.google.com/file/d/1p-eRC9IFwjpETV1wIOI50f8rSdGvgsHa/view?usp=drive_link",
+  aice: "https://drive.google.com/file/d/1VQOsZ9AJiquNiyK94SRgn1INXyWeMK8K/view?usp=drive_link",
+  avoc: "https://drive.google.com/file/d/1FxMyDIofGVwjVV_SxmyeU5v1iCPxQ3p-/view?usp=drive_link",
+  lcca: "https://drive.google.com/file/d/13ZdbhB1BwxdamoJtMhP3EMK5jZTVXVLk/view?usp=drive_link",
 }
 
 type FormState = {
@@ -830,6 +844,16 @@ function RegistrationFormInner() {
                   <Clock className="size-3.5" aria-hidden="true" />
                   {countdownText}
                 </span>
+                <a
+                  href={KATEGORI_HANDBOOK[kategoriConfig.value]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-primary-foreground/15 px-3 py-1 text-xs font-semibold text-primary-foreground transition-all duration-200 hover:scale-105 hover:bg-primary-foreground/25"
+                >
+                  <BookOpen className="size-3.5" aria-hidden="true" />
+                  Handbook
+                  <ExternalLink className="size-3" aria-hidden="true" />
+                </a>
               </div>
               <div className="mt-4 flex items-center gap-3">
                 <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
@@ -1183,14 +1207,14 @@ function RegistrationFormInner() {
                 </div>
               </Section>
 
-              <div className="flex gap-3">
-                <button type="button" onClick={() => goTo(0)} className={cn(ghostBtn, "flex-1")}>
-                  <ArrowLeft className="size-5 transition-transform duration-200 group-hover:-translate-x-1" aria-hidden="true" />
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button type="button" onClick={() => goTo(0)} className={cn(ghostBtn, "min-w-0 flex-1")}>
+                  <ArrowLeft className="size-5 shrink-0 transition-transform duration-200 group-hover:-translate-x-1" aria-hidden="true" />
                   Kembali
                 </button>
-                <button type="button" onClick={handleNextFiles} className={cn(primaryBtn, "flex-1")}>
+                <button type="button" onClick={handleNextFiles} className={cn(primaryBtn, "min-w-0 flex-1")}>
                   Lanjut ke Pembayaran
-                  <ArrowRight className="size-5 transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true" />
+                  <ArrowRight className="size-5 shrink-0 transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -1266,14 +1290,14 @@ function RegistrationFormInner() {
                 </p>
               )}
 
-              <div className="flex gap-3">
-                <button type="button" onClick={() => goTo(1)} className={cn(ghostBtn, "flex-1")}>
-                  <ArrowLeft className="size-5 transition-transform duration-200 group-hover:-translate-x-1" aria-hidden="true" />
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button type="button" onClick={() => goTo(1)} className={cn(ghostBtn, "min-w-0 flex-1")}>
+                  <ArrowLeft className="size-5 shrink-0 transition-transform duration-200 group-hover:-translate-x-1" aria-hidden="true" />
                   Kembali
                 </button>
-                <button type="button" onClick={handleNextBayar} className={cn(primaryBtn, "flex-1")}>
+                <button type="button" onClick={handleNextBayar} className={cn(primaryBtn, "min-w-0 flex-1")}>
                   Lanjut ke Review
-                  <ArrowRight className="size-5 transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true" />
+                  <ArrowRight className="size-5 shrink-0 transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -1301,18 +1325,26 @@ function RegistrationFormInner() {
                 </p>
               )}
 
-              <div className="flex gap-3">
-                <button type="button" onClick={() => goTo(2)} className={cn(ghostBtn, "flex-1")} disabled={submitting}>
-                  <ArrowLeft className="size-5 transition-transform duration-200 group-hover:-translate-x-1" aria-hidden="true" />
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => goTo(2)}
+                  className={cn(ghostBtn, "min-w-0 flex-1")}
+                  disabled={submitting}
+                >
+                  <ArrowLeft className="size-5 shrink-0 transition-transform duration-200 group-hover:-translate-x-1" aria-hidden="true" />
                   Kembali
                 </button>
                 <button
                   type="button"
                   onClick={handleSubmit}
                   disabled={submitting}
-                  className={cn(primaryBtn, "flex-1", submitting && "opacity-70 pointer-events-none")}
+                  className={cn(primaryBtn, "min-w-0 flex-1", submitting && "opacity-70 pointer-events-none")}
                 >
-                  <CheckCircle2 className="size-5" aria-hidden="true" />
+                  <CheckCircle2
+                    className={cn("size-5 shrink-0 transition-transform duration-200", submitting ? "animate-spin" : "group-hover:scale-110")}
+                    aria-hidden="true"
+                  />
                   {submitting ? "Mengirim…" : "Kirim Pendaftaran"}
                 </button>
               </div>
@@ -1470,17 +1502,6 @@ function useBatchStatus(batches: Batch[]): BatchStatus {
  * Ring progress kelengkapan pengisian form — ditaruh di pojok kanan header,
  * warna aksen emas di atas latar ungu biar kontras & langsung kebaca tanpa
  * perlu dibaca teksnya. Persentase dihitung lewat calculateProgress().
- */
-/**
- * Interpolasi warna merah -> kuning -> hijau berdasarkan persentase (0-100),
- * dipakai supaya ProgressRing kerasa "hidup": makin jauh dari selesai makin
- * merah/mendesak, makin dekat selesai makin hijau/aman — bukan warna solid
- * yang monoton di semua persentase.
- */
-/**
- * Palet 6-stop merah -> oranye -> kuning -> kuning terang -> hijau -> hijau
- * terang, diinterpolasi linear per-channel RGB antar dua stop terdekat
- * supaya transisinya halus (bukan cuma satu hue yang diputar).
  */
 const PROGRESS_COLOR_STOPS: [number, [number, number, number]][] = [
   [0, [239, 68, 68]], // merah
@@ -1824,8 +1845,8 @@ function ReviewBlock({ title, onEdit, children }: { title: string; onEdit: () =>
 function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-right font-medium text-foreground">{value || "-"}</dd>
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 flex-1 break-words text-right font-medium text-foreground">{value || "-"}</dd>
     </div>
   )
 }
@@ -1910,16 +1931,16 @@ function SuccessScreen({
           </p>
           <dl className="mt-6 space-y-2 rounded-2xl border border-border bg-secondary/40 p-5 text-sm">
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">{isTim ? "Ketua Tim" : "Nama Peserta"}</dt>
-              <dd className="font-medium text-foreground">{form.ketua}</dd>
+              <dt className="shrink-0 text-muted-foreground">{isTim ? "Ketua Tim" : "Nama Peserta"}</dt>
+              <dd className="min-w-0 flex-1 break-words text-right font-medium text-foreground">{form.ketua}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Institusi</dt>
-              <dd className="text-right font-medium text-foreground">{form.sekolah}</dd>
+              <dt className="shrink-0 text-muted-foreground">Institusi</dt>
+              <dd className="min-w-0 flex-1 break-words text-right font-medium text-foreground">{form.sekolah}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Email Konfirmasi</dt>
-              <dd className="text-right font-medium text-foreground">{form.email}</dd>
+              <dt className="shrink-0 text-muted-foreground">Email Konfirmasi</dt>
+              <dd className="min-w-0 flex-1 break-words text-right font-medium text-foreground">{form.email}</dd>
             </div>
           </dl>
           <p className="mt-4 text-center text-xs text-muted-foreground">
