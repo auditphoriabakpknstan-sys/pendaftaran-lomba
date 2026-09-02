@@ -844,27 +844,29 @@ function RegistrationFormInner() {
                   <Clock className="size-3.5" aria-hidden="true" />
                   {countdownText}
                 </span>
+              </div>
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
+                    {kategoriConfig.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <h1 className="font-heading text-2xl font-bold leading-tight text-primary-foreground text-balance md:text-3xl">
+                      {kategoriConfig.code}
+                    </h1>
+                    <p className="text-sm text-primary-foreground/80">{kategoriConfig.label}</p>
+                  </div>
+                </div>
                 <a
                   href={KATEGORI_HANDBOOK[kategoriConfig.value]}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-full bg-primary-foreground/15 px-3 py-1 text-xs font-semibold text-primary-foreground transition-all duration-200 hover:scale-105 hover:bg-primary-foreground/25"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-foreground/15 px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-all duration-200 hover:scale-105 hover:bg-primary-foreground/25"
                 >
                   <BookOpen className="size-3.5" aria-hidden="true" />
-                  Handbook
+                  <span className="hidden sm:inline">Handbook</span>
                   <ExternalLink className="size-3" aria-hidden="true" />
                 </a>
-              </div>
-              <div className="mt-4 flex items-center gap-3">
-                <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
-                  {kategoriConfig.icon}
-                </div>
-                <div className="min-w-0">
-                  <h1 className="font-heading text-2xl font-bold leading-tight text-primary-foreground text-balance md:text-3xl">
-                    {kategoriConfig.code}
-                  </h1>
-                  <p className="text-sm text-primary-foreground/80">{kategoriConfig.label}</p>
-                </div>
               </div>
             </div>
 
