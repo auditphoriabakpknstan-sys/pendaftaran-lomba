@@ -389,11 +389,6 @@ function loadDraft(kategori: KategoriValue): Draft | null {
     if (!draft.savedAt || Date.now() - draft.savedAt > DRAFT_MAX_AGE_MS) return null
     if (!draft.referenceId || !draft.form) return null
 
-    // PENTING: draft lama (dari versi kode sebelumnya, atau localStorage yang
-    // korup) bisa punya struktur "files" yang tidak lengkap / bukan array.
-    // Kalau langsung dipakai apa adanya, pemanggilan .map()/.filter() di
-    // tempat lain akan crash. Jadi di sini kita paksa semua field jadi array
-    // yang valid — fallback ke array kosong kalau bentuknya tidak sesuai.
     const rawFiles = draft.files as Partial<FileState> | undefined
     const safeFiles: FileState = {
       followIg: Array.isArray(rawFiles?.followIg) ? rawFiles.followIg : [],
@@ -792,28 +787,58 @@ function RegistrationFormInner() {
     <>
       {/* Bar ringkas sticky — hanya muncul setelah header asli discroll
           lewat, isinya cuma Handbook & Progress supaya keduanya tetap
-          kelihatan tanpa freeze seluruh header. */}
+          kelihatan tanpa freeze seluruh header. Di HP: baris atas berisi
+          kategori + countdown + Progress (rata kanan atas), baris bawah
+          khusus tombol Handbook (rata kanan bawah, teks "Handbook" selalu
+          tampil biar jelas fiturnya). Di layar >= sm kembali jadi satu
+          baris seperti biasa. */}
       <div
         className={cn(
           "pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-3 transition-all duration-300",
           showCompactBar ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0",
         )}
       >
-        <div className="pointer-events-auto flex w-full max-w-2xl items-center justify-between gap-2 rounded-2xl border border-primary-foreground/10 bg-primary px-3 py-2.5 shadow-lg shadow-black/25 sm:gap-3 sm:px-4">
-          <div className="flex min-w-0 shrink items-center gap-2">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
-              {kategoriConfig.icon}
+        <div className="pointer-events-auto w-full max-w-2xl rounded-2xl border border-primary-foreground/10 bg-primary px-3 py-2.5 shadow-lg shadow-black/25 sm:px-4">
+          {/* Baris utama: kategori (kiri), countdown (tengah), lalu di sm+
+              tombol Handbook + Progress berdampingan di kanan. Di HP,
+              bagian kanan cuma nampilin Progress — Handbook pindah ke
+              baris kedua di bawahnya. */}
+          <div className="flex items-center justify-between gap-2 sm:gap-3">
+            <div className="flex min-w-0 shrink items-center gap-2">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+                {kategoriConfig.icon}
+              </div>
+              <span className="hidden truncate font-heading text-sm font-bold text-primary-foreground xs:inline sm:inline">
+                {kategoriConfig.code}
+              </span>
             </div>
-            <span className="hidden truncate font-heading text-sm font-bold text-primary-foreground xs:inline sm:inline">
-              {kategoriConfig.code}
-            </span>
+
+            {batchStatus.state === "open" && (
+              <MiniCountdownRings diffMs={batchStatus.diffMs} />
+            )}
+
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+              {/* Handbook di baris utama — cuma tampil di layar sm ke atas */}
+              <a
+                href={KATEGORI_HANDBOOK[kategoriConfig.value]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group hidden items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2.5 py-1.5 text-xs font-semibold text-primary-foreground transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:bg-primary-foreground/20 hover:shadow-md active:translate-y-0 active:scale-100 sm:flex"
+              >
+                <BookOpen className="size-4 transition-transform duration-200 group-hover:-rotate-6 group-hover:scale-110" aria-hidden="true" />
+                <span>Handbook</span>
+              </a>
+              <div className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2.5 py-1.5 text-xs font-semibold text-primary-foreground">
+                <MiniProgressRing percent={progress} />
+                <span className="hidden xs:inline">{progress}%</span>
+              </div>
+            </div>
           </div>
 
-          {batchStatus.state === "open" && (
-            <MiniCountdownRings diffMs={batchStatus.diffMs} />
-          )}
-
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          {/* Baris kedua khusus HP: tombol Handbook rata kanan, di bawah
+              Progress — teks "Handbook" selalu tampil biar pendaftar nggak
+              bingung ini fitur apa. */}
+          <div className="mt-2 flex justify-end sm:hidden">
             <a
               href={KATEGORI_HANDBOOK[kategoriConfig.value]}
               target="_blank"
@@ -821,12 +846,8 @@ function RegistrationFormInner() {
               className="group flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2.5 py-1.5 text-xs font-semibold text-primary-foreground transition-all duration-200 hover:-translate-y-0.5 hover:scale-105 hover:bg-primary-foreground/20 hover:shadow-md active:translate-y-0 active:scale-100"
             >
               <BookOpen className="size-4 transition-transform duration-200 group-hover:-rotate-6 group-hover:scale-110" aria-hidden="true" />
-              <span className="hidden sm:inline">Handbook</span>
+              <span>Handbook</span>
             </a>
-            <div className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2.5 py-1.5 text-xs font-semibold text-primary-foreground">
-              <MiniProgressRing percent={progress} />
-              <span className="hidden xs:inline">{progress}%</span>
-            </div>
           </div>
         </div>
       </div>
