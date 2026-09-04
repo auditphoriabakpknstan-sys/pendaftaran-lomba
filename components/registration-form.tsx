@@ -55,6 +55,8 @@ type KategoriConfig = {
   butuhFotoDiri?: boolean
   /** Khusus LCCA: wajib isi program studi tiap peserta (validasi linieritas jurusan). */
   butuhProdi?: boolean
+  /** Batas jumlah berkas Bukti Follow Instagram — beda tiap kategori. */
+  maxFollowIg: number
 }
 
 const kategoriList: KategoriConfig[] = [
@@ -67,6 +69,7 @@ const kategoriList: KategoriConfig[] = [
     icon: <ScrollText className="size-5" aria-hidden="true" />,
     butuhPosterIg: true,
     butuhFotoDiri: true,
+    maxFollowIg: 6,
   },
   {
     value: "arc",
@@ -75,6 +78,7 @@ const kategoriList: KategoriConfig[] = [
     desc: "Kompetisi reels Instagram bertema audit — individu atau tim, maksimal 3 orang",
     timMode: "opsional",
     icon: <Video className="size-5" aria-hidden="true" />,
+    maxFollowIg: 6,
   },
   {
     value: "aice",
@@ -84,6 +88,7 @@ const kategoriList: KategoriConfig[] = [
     timMode: "solo",
     icon: <Palette className="size-5" aria-hidden="true" />,
     butuhFotoDiri: true,
+    maxFollowIg: 2,
   },
   {
     value: "avoc",
@@ -92,6 +97,7 @@ const kategoriList: KategoriConfig[] = [
     desc: "Kompetisi voice over bertema audit — perorangan",
     timMode: "solo",
     icon: <Mic className="size-5" aria-hidden="true" />,
+    maxFollowIg: 2,
   },
   {
     value: "lcca",
@@ -102,6 +108,7 @@ const kategoriList: KategoriConfig[] = [
     icon: <BrainCircuit className="size-5" aria-hidden="true" />,
     butuhFotoDiri: true,
     butuhProdi: true,
+    maxFollowIg: 6,
   },
 ]
 
@@ -901,7 +908,7 @@ function RegistrationFormInner() {
               </div>
             </div>
 
-            <div className="flex shrink-0 items-end gap-4">
+            <div className="flex shrink-0 flex-col items-end gap-3 sm:flex-row sm:items-end sm:gap-4">
               <a
                 href={KATEGORI_HANDBOOK[kategoriConfig.value]}
                 target="_blank"
