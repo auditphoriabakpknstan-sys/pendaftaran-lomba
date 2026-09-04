@@ -908,7 +908,7 @@ function RegistrationFormInner() {
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-col items-end gap-3 sm:flex-row sm:items-end sm:gap-4">
+            <div className="flex shrink-0 flex-col items-center gap-3 sm:flex-row sm:items-end sm:gap-4">
               <a
                 href={KATEGORI_HANDBOOK[kategoriConfig.value]}
                 target="_blank"
@@ -921,7 +921,7 @@ function RegistrationFormInner() {
                     <ExternalLink className="size-3" aria-hidden="true" />
                   </span>
                 </span>
-                <span className="hidden text-xs font-semibold uppercase tracking-wider text-primary-foreground/70 sm:block">
+                <span className="text-xs font-semibold uppercase tracking-wider text-primary-foreground/70">
                   Handbook
                 </span>
               </a>
@@ -1737,7 +1737,7 @@ function ProgressRing({ percent }: { percent: number }) {
           )}
         </div>
       </div>
-      <span className="hidden text-xs font-semibold uppercase tracking-wider text-primary-foreground/70 sm:block">
+      <span className="text-xs font-semibold uppercase tracking-wider text-primary-foreground/70">
         {isDone ? "Lengkap" : "Progres"}
       </span>
     </div>
