@@ -300,7 +300,7 @@
   height: 3px;
   opacity: 0;
   animation-name: meteor-fall;
-  animation-timing-function: ease-in;
+  animation-timing-function: linear;
   animation-iteration-count: infinite;
 }
 
@@ -339,20 +339,15 @@
     opacity: 0;
     transform: translate(0, 0);
   }
-  5% {
+  10% {
     opacity: 1;
   }
-  55% {
+  72% {
     opacity: 1;
-    transform: translate(var(--meteor-dx, 30vh), var(--meteor-dy, 30vh));
-  }
-  68% {
-    opacity: 0;
-    transform: translate(calc(var(--meteor-dx, 30vh) * 1.25), calc(var(--meteor-dy, 30vh) * 1.25));
   }
   100% {
     opacity: 0;
-    transform: translate(calc(var(--meteor-dx, 30vh) * 1.25), calc(var(--meteor-dy, 30vh) * 1.25));
+    transform: translate(var(--meteor-dx, 30vh), var(--meteor-dy, 30vh));
   }
 }
 
@@ -368,20 +363,15 @@
     opacity: 0;
     transform: translate(0, 0);
   }
-  4% {
+  6% {
     opacity: 1;
   }
-  86% {
+  88% {
     opacity: 1;
-    transform: translate(var(--meteor-dx, 90vh), var(--meteor-dy, 90vh));
-  }
-  97% {
-    opacity: 0;
-    transform: translate(calc(var(--meteor-dx, 90vh) * 1.03), calc(var(--meteor-dy, 90vh) * 1.03));
   }
   100% {
     opacity: 0;
-    transform: translate(calc(var(--meteor-dx, 90vh) * 1.03), calc(var(--meteor-dy, 90vh) * 1.03));
+    transform: translate(var(--meteor-dx, 90vh), var(--meteor-dy, 90vh));
   }
 }
 
