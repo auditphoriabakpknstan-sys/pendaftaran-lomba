@@ -812,7 +812,7 @@ function RegistrationFormInner() {
               baris kedua di bawahnya. */}
           <div className="flex items-center justify-between gap-2 sm:gap-3">
             <div className="flex min-w-0 shrink items-center gap-2">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white">
                 {kategoriConfig.icon}
               </div>
               <span className="hidden truncate font-heading text-sm font-bold text-primary-foreground xs:inline sm:inline">
@@ -883,10 +883,10 @@ function RegistrationFormInner() {
           className="relative overflow-hidden bg-primary bg-repeat px-6 py-8 md:px-10"
           style={{ backgroundImage: "url('/images/header-pattern.jpg')", backgroundSize: "260px 260px" }}
         >
-          {/* Overlay gelap tipis supaya teks & badge tetap kontras di atas pola yang ramai */}
-          <div className="absolute inset-0 bg-black/35" aria-hidden="true" />
+          {/* Overlay gelap supaya teks & badge tetap kontras di atas pola yang ramai */}
+          <div className="absolute inset-0 bg-black/45" aria-hidden="true" />
           <div className="absolute -right-8 -top-8 size-40 rounded-full bg-primary-foreground/10" aria-hidden="true" />
-          <div className="absolute -bottom-12 -left-6 size-40 rounded-full bg-accent/20" aria-hidden="true" />
+          <div className="absolute -bottom-12 -left-6 size-40 rounded-full bg-sky-400/20" aria-hidden="true" />
           <div className="relative flex items-center justify-between gap-4">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -894,21 +894,21 @@ function RegistrationFormInner() {
                   <ShieldCheck className="size-3.5" aria-hidden="true" />
                   Pendaftaran Dibuka
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-accent-foreground">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500 px-3 py-1 text-xs font-semibold text-white shadow-sm">
                   <Clock className="size-3.5" aria-hidden="true" />
                   {countdownText}
                 </span>
               </div>
               <div className="mt-4 flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
+                  <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-sky-500 text-white shadow-sm">
                     {kategoriConfig.icon}
                   </div>
                   <div className="min-w-0">
-                    <h1 className="font-heading text-2xl font-bold leading-tight text-primary-foreground text-balance md:text-3xl">
+                    <h1 className="font-heading text-2xl font-bold leading-tight text-primary-foreground text-balance drop-shadow-sm md:text-3xl">
                       {kategoriConfig.code}
                     </h1>
-                    <p className="text-sm text-primary-foreground/80">{kategoriConfig.label}</p>
+                    <p className="text-sm text-primary-foreground drop-shadow-sm">{kategoriConfig.label}</p>
                   </div>
                 </div>
               </div>
@@ -923,11 +923,11 @@ function RegistrationFormInner() {
               >
                 <span className="relative flex size-14 items-center justify-center rounded-2xl border border-primary-foreground/20 bg-primary-foreground/10 text-primary-foreground shadow-sm transition-all duration-200 group-hover:-translate-y-0.5 group-hover:scale-105 group-hover:border-primary-foreground/30 group-hover:bg-primary-foreground/20 group-hover:shadow-md">
                   <BookOpen className="size-6" aria-hidden="true" />
-                  <span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full bg-accent text-accent-foreground ring-2 ring-primary transition-transform duration-200 group-hover:scale-110">
+                  <span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full bg-sky-500 text-white ring-2 ring-primary-foreground/40 transition-transform duration-200 group-hover:scale-110">
                     <ExternalLink className="size-3" aria-hidden="true" />
                   </span>
                 </span>
-                <span className="text-xs font-semibold uppercase tracking-wider text-primary-foreground/70">
+                <span className="text-xs font-semibold uppercase tracking-wider text-primary-foreground drop-shadow-sm">
                   Handbook
                 </span>
               </a>
@@ -1743,7 +1743,7 @@ function ProgressRing({ percent }: { percent: number }) {
           )}
         </div>
       </div>
-      <span className="text-xs font-semibold uppercase tracking-wider text-primary-foreground/70">
+      <span className="text-xs font-semibold uppercase tracking-wider text-primary-foreground drop-shadow-sm">
         {isDone ? "Lengkap" : "Progres"}
       </span>
     </div>
