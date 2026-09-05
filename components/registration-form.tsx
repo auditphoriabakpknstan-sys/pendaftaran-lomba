@@ -1425,7 +1425,7 @@ function RegistrationFormInner() {
         href={`https://wa.me/${contact.whatsapp}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-2 inline-flex w-full items-center justify-center gap-1.5 text-sm font-semibold text-white transition-all duration-200 hover:scale-105 hover:text-accent hover:underline"
+        className="mt-2 inline-flex w-full items-center justify-center gap-1.5 text-sm font-semibold text-white transition-all duration-200 hover:scale-105 hover:text-sky-300 hover:underline"
       >
         <MessageCircle className="size-4" aria-hidden="true" />
         {contact.nama} (+{contact.whatsapp})
