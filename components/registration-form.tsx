@@ -837,7 +837,7 @@ function RegistrationFormInner() {
               </a>
               <div className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/10 px-2.5 py-1.5 text-xs font-semibold text-primary-foreground">
                 <MiniProgressRing percent={progress} />
-                <span className="hidden xs:inline">{progress}%</span>
+                <span>{progress}%</span>
               </div>
             </div>
           </div>
