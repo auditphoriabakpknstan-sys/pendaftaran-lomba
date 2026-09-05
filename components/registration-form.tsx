@@ -884,7 +884,7 @@ function RegistrationFormInner() {
           style={{ backgroundImage: "url('/images/header-pattern.jpg')", backgroundSize: "260px 260px" }}
         >
           {/* Overlay gelap tipis supaya teks & badge tetap kontras di atas pola yang ramai */}
-          <div className="absolute inset-0 bg-primary/75" aria-hidden="true" />
+          <div className="absolute inset-0 bg-black/35" aria-hidden="true" />
           <div className="absolute -right-8 -top-8 size-40 rounded-full bg-primary-foreground/10" aria-hidden="true" />
           <div className="absolute -bottom-12 -left-6 size-40 rounded-full bg-accent/20" aria-hidden="true" />
           <div className="relative flex items-center justify-between gap-4">
