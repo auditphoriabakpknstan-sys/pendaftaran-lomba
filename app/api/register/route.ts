@@ -13,13 +13,6 @@ const KATEGORI_LABEL: Record<string, string> = {
   lcca: "LCCA - Lomba Cerdas Cermat Audit",
 }
 
-// CATATAN REVISI: Berkas/link karya (upload essay/abstrak, link reels IG,
-// infografis, audio voice over) DIHAPUS TOTAL dari alur pendaftaran ini.
-// Berkas umum di bawah WAJIB untuk SEMUA kategori. Selain itu ada berkas
-// tambahan yang cuma wajib untuk kategori tertentu (lihat
-// KATEGORI_EXTRA_FILE_REQUIREMENTS): "fotoDiri" khusus AEC, AICE & LCCA
-// (dipakai untuk validasi identitas peserta saat pelaksanaan final),
-// "posterIg" khusus AEC.
 const REQUIRED_FILE_FIELDS = ["followIg", "ktm", "twibbon", "buktiBayar"] as const
 
 // Requirement berkas tambahan per kategori.
@@ -46,10 +39,6 @@ const dataSchema = z.object({
   }),
   namaTim: z.string().optional().default(""),
   ketua: z.string().min(2, "Nama ketua/peserta wajib diisi."),
-  // Program studi khusus dipakai/divalidasi untuk kategori LCCA (validasi
-  // ketentuan jurusan yang linier dengan Akuntansi dan sejenisnya), tapi
-  // tetap diterima sebagai field opsional untuk kategori lain supaya schema
-  // satu ini bisa dipakai bersama tanpa branching per kategori.
   prodiKetua: z.string().optional().default(""),
   anggota1: z.string().optional().default(""),
   prodiAnggota1: z.string().optional().default(""),
@@ -74,6 +63,8 @@ const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
 const RATE_LIMIT_MAX = 8
 const rateLimitStore = new Map<string, number[]>()
 
+const APPS_SCRIPT_TIMEOUT_MS = 45_000
+
 function isRateLimited(ip: string) {
   const now = Date.now()
   const timestamps = (rateLimitStore.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
@@ -82,7 +73,43 @@ function isRateLimited(ip: string) {
   return timestamps.length > RATE_LIMIT_MAX
 }
 
+/**
+ * Panggil Apps Script dengan timeout eksplisit lewat AbortController.
+ * Melempar error dengan pesan yang membedakan penyebabnya (timeout vs
+ * fetch gagal total vs lainnya) supaya gampang didiagnosis dari log Vercel.
+ */
+async function callAppsScript(scriptUrl: string, payload: unknown): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), APPS_SCRIPT_TIMEOUT_MS)
+
+  try {
+    const res = await fetch(scriptUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      redirect: "follow",
+      signal: controller.signal,
+    })
+    return res
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(
+        `Apps Script tidak merespons dalam ${APPS_SCRIPT_TIMEOUT_MS / 1000} detik (timeout). ` +
+          "Kemungkinan proses di Apps Script (mis. memindahkan banyak file ke Drive) memakan waktu " +
+          "terlalu lama, atau Apps Script sedang tidak responsif.",
+      )
+    }
+    throw new Error(`Gagal menghubungi Apps Script: ${err instanceof Error ? err.message : String(err)}`)
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 export async function POST(req: Request) {
+  // referenceId diambil di awal (sebelum try) supaya tetap bisa disertakan
+  // di log error meski parsing body belum selesai.
+  let referenceIdForLog = "(belum diketahui)"
+
   try {
     const scriptUrl = process.env.APPS_SCRIPT_URL
     if (!scriptUrl) {
@@ -101,6 +128,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
+    referenceIdForLog = String(body?.referenceId ?? "(kosong)")
 
     const honeypot = String(body?.website ?? "")
     if (honeypot.trim() !== "") {
@@ -159,35 +187,58 @@ export async function POST(req: Request) {
       }
     }
 
-    const scriptRes = await fetch(scriptUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        referenceId: data.referenceId,
-        kategori: data.kategori,
-        kategoriLabel: KATEGORI_LABEL[data.kategori] ?? data.kategori,
-        namaTim: data.namaTim,
-        ketua: data.ketua,
-        prodiKetua: data.prodiKetua,
-        anggota1: data.anggota1,
-        prodiAnggota1: data.prodiAnggota1,
-        anggota2: data.anggota2,
-        prodiAnggota2: data.prodiAnggota2,
-        sekolah: data.sekolah,
-        kota: data.kota,
-        telepon: data.telepon,
-        email: data.email,
-        fileUrls: data.fileUrls,
-      }),
-      redirect: "follow",
+    const scriptStartedAt = Date.now()
+    const scriptRes = await callAppsScript(scriptUrl, {
+      referenceId: data.referenceId,
+      kategori: data.kategori,
+      kategoriLabel: KATEGORI_LABEL[data.kategori] ?? data.kategori,
+      namaTim: data.namaTim,
+      ketua: data.ketua,
+      prodiKetua: data.prodiKetua,
+      anggota1: data.anggota1,
+      prodiAnggota1: data.prodiAnggota1,
+      anggota2: data.anggota2,
+      prodiAnggota2: data.prodiAnggota2,
+      sekolah: data.sekolah,
+      kota: data.kota,
+      telepon: data.telepon,
+      email: data.email,
+      fileUrls: data.fileUrls,
     })
+    const scriptDurationMs = Date.now() - scriptStartedAt
 
     const text = await scriptRes.text()
+
+    // Log SELALU ditulis (bukan cuma pas gagal) supaya durasi & status code
+    // asli dari Apps Script kelihatan di Vercel logs — ini yang paling
+    // berguna buat bedain "beneran lambat" vs "permission/URL salah" vs
+    // "Apps Script crash". Body dipotong biar log nggak kebanjiran kalau
+    // Apps Script balikin HTML error page yang panjang.
+    console.log("[/api/register] Apps Script response", {
+      referenceId: referenceIdForLog,
+      httpStatus: scriptRes.status,
+      durationMs: scriptDurationMs,
+      bodyPreview: text.slice(0, 500),
+    })
+
     let result: { ok?: boolean; message?: string }
     try {
       result = JSON.parse(text)
     } catch {
-      throw new Error("Respons dari Apps Script tidak valid. Cek apakah Web App sudah di-deploy dengan benar.")
+      // Ini kondisi yang paling sering disalahartikan sebagai "belum
+      // di-deploy". Cek dulu: apakah bodyPreview di log di atas berupa HTML
+      // (mengandung "<html" atau "accounts.google.com")? Kalau iya, itu
+      // tandanya permission "Who has access" BUKAN "Anyone" — bukan soal
+      // deploy status.
+      const looksLikeHtml = /<html|accounts\.google\.com/i.test(text)
+      throw new Error(
+        looksLikeHtml
+          ? "Apps Script mengembalikan halaman HTML (kemungkinan login Google), bukan JSON. " +
+            'Periksa setting deployment: "Who has access" harus "Anyone", bukan "Only myself" atau "Anyone with Google account".'
+          : `Respons dari Apps Script bukan JSON valid (HTTP ${scriptRes.status}). ` +
+            "Kemungkinan URL deployment sudah kadaluarsa (misalnya kalau pernah dibuat ulang lewat " +
+            '"New deployment" alih-alih "Manage deployments > Edit > New version"), atau script-nya error/crash.',
+      )
     }
 
     if (!result.ok) {
@@ -198,11 +249,25 @@ export async function POST(req: Request) {
     }
 
     const allBlobUrls = Object.values(data.fileUrls).flat()
-    await Promise.allSettled(allBlobUrls.map((url) => del(url)))
+    const deleteResults = await Promise.allSettled(allBlobUrls.map((url) => del(url)))
+    const failedDeletes = deleteResults.filter((r) => r.status === "rejected").length
+    if (failedDeletes > 0) {
+      // Tidak fatal — file di Blob storage cuma jadi sampah kalau gagal
+      // dihapus, tapi pendaftaran tetap sukses. Cukup dicatat.
+      console.warn("[/api/register] Sebagian file Blob gagal dihapus", {
+        referenceId: referenceIdForLog,
+        failedDeletes,
+        totalFiles: allBlobUrls.length,
+      })
+    }
 
     return NextResponse.json({ ok: true, message: result.message ?? "Pendaftaran berhasil dikirim." })
   } catch (error) {
-    console.error("[/api/register]", error)
+    console.error("[/api/register] Gagal memproses pendaftaran", {
+      referenceId: referenceIdForLog,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     const message =
       error instanceof Error ? error.message : "Terjadi kesalahan pada server. Coba lagi."
     return NextResponse.json({ ok: false, message }, { status: 500 })
