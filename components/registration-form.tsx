@@ -261,7 +261,7 @@ const kategoriBatches: Record<Exclude<KategoriValue, "">, Batch[]> = {
   arc: [
     { label: "Batch 1", start: "2026-08-30T00:00:00", end: "2026-09-14T23:59:59" },
     { label: "Batch 2", start: "2026-09-15T00:00:00", end: "2026-10-12T23:59:59" },
-    { label: "Batch 3", start: "2026-10-13T00:00:00", end" "2026-10-27T23:59:59" },
+    { label: "Batch 3", start: "2026-10-13T00:00:00", end: "2026-10-27T23:59:59" },
   ],
   avoc: [
     { label: "Batch 1", start: "2026-08-30T00:00:00", end: "2026-09-14T23:59:59" },
