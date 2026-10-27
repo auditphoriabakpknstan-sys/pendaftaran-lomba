@@ -3,7 +3,8 @@ import { z } from "zod"
 import { del } from "@vercel/blob"
 
 export const runtime = "nodejs"
-export const maxDuration = 60
+// Batas maksimum eksekusi function di Vercel: 2 menit.
+export const maxDuration = 120
 
 const KATEGORI_LABEL: Record<string, string> = {
   aec: "AEC - Audit Essay Competition",
@@ -63,7 +64,12 @@ const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
 const RATE_LIMIT_MAX = 8
 const rateLimitStore = new Map<string, number[]>()
 
-const APPS_SCRIPT_TIMEOUT_MS = 45_000
+// Timeout untuk Apps Script: 110 detik. Sengaja dibuat lebih kecil dari
+// maxDuration (120 detik) supaya masih ada ~10 detik untuk parsing respons
+// dan menghapus file Blob sebelum function dimatikan oleh Vercel. Kalau
+// angka ini >= maxDuration, Vercel akan memutus function lebih dulu dan
+// pesan error timeout yang informatif di bawah tidak akan pernah muncul.
+const APPS_SCRIPT_TIMEOUT_MS = 110_000
 
 function isRateLimited(ip: string) {
   const now = Date.now()
