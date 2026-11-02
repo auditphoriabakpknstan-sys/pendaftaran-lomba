@@ -817,13 +817,7 @@ function RegistrationFormInner() {
 
   return (
     <>
-      {/* Bar ringkas sticky — hanya muncul setelah header asli discroll
-          lewat, isinya cuma Handbook & Progress supaya keduanya tetap
-          kelihatan tanpa freeze seluruh header. Di HP: baris atas berisi
-          kategori + countdown + Progress (rata kanan atas), baris bawah
-          khusus tombol Handbook (rata kanan bawah, teks "Handbook" selalu
-          tampil biar jelas fiturnya). Di layar >= sm kembali jadi satu
-          baris seperti biasa. */}
+      {/* Bar ringkas sticky */}
       <div
         className={cn(
           "pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-3 transition-all duration-300",
@@ -831,10 +825,6 @@ function RegistrationFormInner() {
         )}
       >
         <div className="pointer-events-auto w-full max-w-2xl rounded-2xl border border-primary-foreground/10 bg-primary px-3 py-2.5 shadow-lg shadow-black/25 sm:px-4">
-          {/* Baris utama: kategori (kiri), countdown (tengah), lalu di sm+
-              tombol Handbook + Progress berdampingan di kanan. Di HP,
-              bagian kanan cuma nampilin Progress — Handbook pindah ke
-              baris kedua di bawahnya. */}
           <div className="flex items-center justify-between gap-2 sm:gap-3">
             <div className="flex min-w-0 shrink items-center gap-2">
               <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white">
@@ -850,7 +840,6 @@ function RegistrationFormInner() {
             )}
 
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-              {/* Handbook di baris utama — cuma tampil di layar sm ke atas */}
               <a
                 href={KATEGORI_HANDBOOK[kategoriConfig.value]}
                 target="_blank"
@@ -867,9 +856,6 @@ function RegistrationFormInner() {
             </div>
           </div>
 
-          {/* Baris kedua khusus HP: tombol Handbook rata kanan, di bawah
-              Progress — teks "Handbook" selalu tampil biar pendaftar nggak
-              bingung ini fitur apa. */}
           <div className="mt-2 flex justify-end sm:hidden">
             <a
               href={KATEGORI_HANDBOOK[kategoriConfig.value]}
@@ -908,7 +894,6 @@ function RegistrationFormInner() {
           className="relative overflow-hidden bg-primary bg-repeat px-6 py-8 md:px-10"
           style={{ backgroundImage: "url('/images/header-pattern.jpg')", backgroundSize: "260px 260px" }}
         >
-          {/* Overlay gelap supaya teks & badge tetap kontras di atas pola yang ramai */}
           <div className="absolute inset-0 bg-black/45" aria-hidden="true" />
           <div className="absolute -right-8 -top-8 size-40 rounded-full bg-primary-foreground/10" aria-hidden="true" />
           <div className="absolute -bottom-12 -left-6 size-40 rounded-full bg-sky-400/20" aria-hidden="true" />
@@ -1462,7 +1447,6 @@ function RegistrationFormInner() {
 
 /* ---------- Sub-komponen ---------- */
 
-/** Halaman fallback kalau form dibuka tanpa parameter ?kategori= dari Google Sites. */
 function KategoriPicker({ onPick }: { onPick: (value: Exclude<KategoriValue, "">) => void }) {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 md:py-16">
@@ -1553,11 +1537,6 @@ type BatchStatus =
   | { state: "upcoming"; text: string; batchLabel: string }
   | { state: "closed"; text: string }
 
-/**
- * Cek batch mana (kalau ada) yang sedang aktif untuk waktu sekarang, update
- * tiap detik. Kalau tidak sedang di batch manapun tapi masih ada batch yang
- * akan datang -> "upcoming". Kalau semua batch sudah lewat -> "closed".
- */
 function useBatchStatus(batches: Batch[]): BatchStatus {
   const [now, setNow] = useState(() => Date.now())
 
@@ -1584,12 +1563,12 @@ function useBatchStatus(batches: Batch[]): BatchStatus {
 }
 
 const PROGRESS_COLOR_STOPS: [number, [number, number, number]][] = [
-  [0, [239, 68, 68]], // merah
-  [20, [249, 115, 22]], // oranye
-  [40, [234, 179, 8]], // kuning
-  [60, [253, 224, 71]], // kuning terang
-  [80, [34, 197, 94]], // hijau
-  [100, [74, 222, 128]], // hijau terang
+  [0, [239, 68, 68]],
+  [20, [249, 115, 22]],
+  [40, [234, 179, 8]],
+  [60, [253, 224, 71]],
+  [80, [34, 197, 94]],
+  [100, [74, 222, 128]],
 ]
 
 function progressColor(percent: number) {
@@ -2199,7 +2178,7 @@ function Field({
   error,
   icon,
   children,
-}, {
+}: {
   label: string
   required?: boolean
   error?: string
