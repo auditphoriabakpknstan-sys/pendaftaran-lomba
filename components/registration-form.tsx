@@ -295,14 +295,38 @@ const BANKS = [
 const DRAFT_STORAGE_KEY = "auditphoria-form-draft"
 const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000 // draft basi setelah 24 jam
 
+/**
+ * Fungsi upload file langsung ke Cloudinary menggunakan Cloud Name dan Upload Preset
+ * yang sudah dikonfigurasi melalui Environment Variables di Vercel.
+ */
 async function uploadFileToBlob(field: string, file: File, referenceId: string): Promise<string> {
-  const { upload } = await import("@vercel/blob/client")
-  const blob = await upload(`pendaftaran/${referenceId}/${field}-${Date.now()}-${file.name}`, file, {
-    access: "public",
-    handleUploadUrl: "/api/blob-upload",
-    clientPayload: JSON.stringify({ field }),
-  })
-  return blob.url
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
+
+  if (!cloudName || !uploadPreset) {
+    throw new Error("Konfigurasi Cloudinary (Cloud Name atau Upload Preset) belum diatur di environment variables.")
+  }
+
+  const formData = new FormData()
+  formData.append("file", file)
+  formData.append("upload_preset", uploadPreset)
+  formData.append("public_id", `pendaftaran/${referenceId}/${field}-${Date.now()}-${file.name.replace(/\.[^/.]+$/, "")}`)
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${cloudName}/upload`,
+    {
+      method: "POST",
+      body: formData,
+    }
+  )
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(data.error?.message || "Gagal mengunggah file ke Cloudinary.")
+  }
+
+  return data.secure_url
 }
 
 function generateReferenceId(prefix: string) {
@@ -1533,12 +1557,6 @@ type BatchStatus =
  * Cek batch mana (kalau ada) yang sedang aktif untuk waktu sekarang, update
  * tiap detik. Kalau tidak sedang di batch manapun tapi masih ada batch yang
  * akan datang -> "upcoming". Kalau semua batch sudah lewat -> "closed".
- *
- * PENTING: hook ini (dan hook di dalamnya, useState/useEffect) HARUS selalu
- * dipanggil di komponen pemanggil secara tanpa syarat / tidak boleh berada
- * setelah early return apa pun. Kalau perlu dipakai dengan kondisi "belum
- * ada kategori", kirim array batch kosong ([]) — bukan skip pemanggilan
- * hook-nya.
  */
 function useBatchStatus(batches: Batch[]): BatchStatus {
   const [now, setNow] = useState(() => Date.now())
@@ -1565,11 +1583,6 @@ function useBatchStatus(batches: Batch[]): BatchStatus {
   return { state: "closed", text: "Pendaftaran ditutup" }
 }
 
-/**
- * Ring progress kelengkapan pengisian form — ditaruh di pojok kanan header,
- * warna aksen emas di atas latar ungu biar kontras & langsung kebaca tanpa
- * perlu dibaca teksnya. Persentase dihitung lewat calculateProgress().
- */
 const PROGRESS_COLOR_STOPS: [number, [number, number, number]][] = [
   [0, [239, 68, 68]], // merah
   [20, [249, 115, 22]], // oranye
@@ -1599,12 +1612,6 @@ function progressColor(percent: number) {
   return `rgb(${r}, ${g}, ${b})`
 }
 
-/**
- * Satu ring kecil untuk satu unit waktu (hari/jam/menit/detik) di
- * MiniCountdownRings — nilainya sendiri yang ditulis di tengah ring,
- * sementara isian ring menunjukkan proporsi nilai itu terhadap batas
- * maksimum unitnya (mis. detik terhadap 60) sebagai aksen visual.
- */
 function CountdownRingUnit({ value, max, label }: { value: number; max: number; label: string }) {
   const size = 26
   const stroke = 3
@@ -1642,12 +1649,6 @@ function CountdownRingUnit({ value, max, label }: { value: number; max: number; 
   )
 }
 
-/**
- * Mini countdown 4 lingkaran (Hari, Jam, Menit, Detik) untuk sisa waktu
- * batch pendaftaran yang sedang aktif — ditampilkan di compact bar sticky
- * begitu header asli discroll lewat. Update tiap detik mengikuti diffMs
- * dari useBatchStatus.
- */
 function MiniCountdownRings({ diffMs }: { diffMs: number }) {
   const totalSeconds = Math.max(0, Math.floor(diffMs / 1000))
   const days = Math.floor(totalSeconds / 86400)
@@ -1665,10 +1666,6 @@ function MiniCountdownRings({ diffMs }: { diffMs: number }) {
   )
 }
 
-/**
- * Versi ring progress ukuran mini tanpa label, dipakai di compact bar
- * sticky yang muncul setelah header asli discroll lewat.
- */
 function MiniProgressRing({ percent }: { percent: number }) {
   const size = 22
   const stroke = 3
@@ -1855,7 +1852,6 @@ function MultiFileField({
                 )}
               </span>
               <span className="min-w-0 flex-1">
-                {/* Klik nama berkas untuk membuka & memeriksa langsung berkas yang telah terunggah. */}
                 {file.url ? (
                   <a
                     href={file.url}
@@ -2203,7 +2199,7 @@ function Field({
   error,
   icon,
   children,
-}: {
+}, {
   label: string
   required?: boolean
   error?: string
